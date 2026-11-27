@@ -286,6 +286,123 @@ impl Engine {
     }
 }
 
+// ---------- MCP（照搬 CC Switch 的统一 MCP） ----------
+
+/// 一个 MCP 服务器，和它在哪些 Agent 里启用。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Mcp {
+    pub id: String,
+    pub name: String,
+    /// 原样的服务器定义：`{type, command, args, env}` 或 `{type, url, headers}`。
+    pub server: Value,
+    pub on: Vec<AgentId>,
+}
+
+impl Engine {
+    /// 把各 Agent 里现有的 MCP 读进清单（只读，不改它们的配置），返回新读进来的个数。
+    pub fn mcp_import(&self) -> Result<usize, String> {
+        crate::services::McpService::import_from_all_apps(&self.state).map_err(err)
+    }
+
+    pub fn mcp_list(&self) -> Result<Vec<Mcp>, String> {
+        let all = crate::services::McpService::get_all_servers(&self.state).map_err(err)?;
+        Ok(all
+            .into_values()
+            .map(|s| Mcp {
+                on: AgentId::ALL.into_iter().filter(|id| s.apps.is_enabled_for(&app(*id))).collect(),
+                id: s.id,
+                name: s.name,
+                server: s.server,
+            })
+            .collect())
+    }
+
+    /// 在一个 Agent 里启用或停用：写进 / 移出它的配置文件。
+    pub fn mcp_toggle(&self, id: &str, agent: AgentId, enabled: bool) -> Result<(), String> {
+        crate::services::McpService::toggle_app(&self.state, id, app(agent), enabled).map_err(err)
+    }
+
+    /// 新增或修改；`on` 里的 Agent 写进去，其余的移出来。返回 id。
+    pub fn mcp_save(&self, id: Option<String>, name: &str, server: Value, on: &[AgentId]) -> Result<String, String> {
+        let existing = crate::services::McpService::get_all_servers(&self.state).map_err(err)?;
+        let id = match id {
+            Some(id) => id,
+            None => {
+                let base: String = name
+                    .chars()
+                    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c.to_ascii_lowercase() } else { '-' })
+                    .collect();
+                let base = if base.trim_matches('-').is_empty() { "mcp".to_string() } else { base };
+                (0..)
+                    .map(|n| if n == 0 { base.clone() } else { format!("{base}-{n}") })
+                    .find(|candidate| !existing.contains_key(candidate))
+                    .unwrap_or(base)
+            }
+        };
+        let mut server_row = existing.get(&id).cloned().unwrap_or(crate::app_config::McpServer {
+            id: id.clone(),
+            name: name.to_string(),
+            server: Value::Null,
+            apps: Default::default(),
+            description: None,
+            homepage: None,
+            docs: None,
+            tags: Vec::new(),
+        });
+        server_row.name = name.to_string();
+        server_row.server = server;
+        for agent in AgentId::ALL {
+            server_row.apps.set_enabled_for(&app(agent), on.contains(&agent));
+        }
+        crate::services::McpService::upsert_server(&self.state, server_row).map_err(err)?;
+        Ok(id)
+    }
+
+    /// 从清单和所有 Agent 的配置里删掉。
+    pub fn mcp_delete(&self, id: &str) -> Result<(), String> {
+        crate::services::McpService::delete_server(&self.state, id).map(|_| ()).map_err(err)
+    }
+
+    pub fn mcp_server(&self, id: &str) -> Option<Value> {
+        crate::services::McpService::get_all_servers(&self.state)
+            .ok()?
+            .get(id)
+            .map(|s| s.server.clone())
+    }
+}
+
+/// 试着连一下每个 MCP：能用、要先登录、连不上。
+pub async fn mcp_check(servers: Vec<(String, Value)>) -> Vec<(String, &'static str)> {
+    use crate::services::mcp_connectivity::{start_checks, ConnectivityStatus};
+    let total = servers.len();
+    let rows = servers
+        .into_iter()
+        .map(|(id, server)| crate::app_config::McpServer {
+            id: id.clone(),
+            name: id,
+            server,
+            apps: Default::default(),
+            description: None,
+            homepage: None,
+            docs: None,
+            tags: Vec::new(),
+        })
+        .collect();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    start_checks(rows, move |result| tx.send(result).is_ok());
+    let mut out = Vec::with_capacity(total);
+    while out.len() < total {
+        let Some(result) = rx.recv().await else { break };
+        let status = match result.status {
+            ConnectivityStatus::Connected => "ok",
+            ConnectivityStatus::AuthRequired => "login",
+            ConnectivityStatus::Failed => "failed",
+        };
+        out.push((result.server_id, status));
+    }
+    out
+}
+
 /// 退出前把引擎安排的延迟清理（Claude 的空值）做完。
 pub fn settle() {
     if let Err(error) = crate::services::provider::claude_direct::settle_claude_tombstones() {

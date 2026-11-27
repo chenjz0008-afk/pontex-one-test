@@ -1,6 +1,6 @@
-//! 托盘：五个 Agent，每个只有「PonteX / 原生 / 原配置」。内容来自同一份快照。
+//! 托盘：一层菜单。上面每个 Agent 一行，打勾 = 已启用 PonteX；下面是最近的文件夹。内容来自同一份快照。
 
-use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager};
 
@@ -86,87 +86,88 @@ fn build(app: &AppHandle, snapshot: &Snapshot) -> tauri::Result<Menu<tauri::Wry>
     let say = |cn: &'static str, en: &'static str| if zh { cn } else { en };
     let menu = Menu::new(app)?;
     let name = if zh { PRODUCT_ZH } else { PRODUCT_EN };
-    let open = if zh { format!("打开 {name}") } else { format!("Open {name}") };
-    menu.append(&MenuItem::with_id(app, "open", open, true, None::<&str>)?)?;
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    // 一层：打勾 = 已启用 PonteX，点一下就切；没勾的在名字后面写着现在是什么。
+    // 系统菜单的勾选项不能带图标、右边也放不了灰字，所以状态写进名字里。
+    menu.append(&MenuItem::with_id(app, "heading", say("已启用 PonteX 的 Agent", "Agents using PonteX"), false, None::<&str>)?)?;
     for agent in &snapshot.agents {
-        let label = format!("{}  ·  {}", agent.label, text(zh, agent.status.code));
         let usable = agent.install.usable();
-        let mut items: Vec<Box<dyn IsMenuItem<tauri::Wry>>> = Vec::new();
-        if agent.switchable {
-            let mut add = |target: Target, title: &str, enabled: bool| -> tauri::Result<()> {
-                items.push(Box::new(CheckMenuItem::with_id(
-                    app,
-                    format!("switch:{}:{}", agent.id.key(), target_key(target)),
-                    title,
-                    enabled && usable,
-                    agent.current == Some(target),
-                    None::<&str>,
-                )?));
-                Ok(())
-            };
-            add(Target::Pontex, "PonteX", snapshot.connected)?;
-            add(Target::Native, say("原生", "Native"), true)?;
-            if agent.previous.is_some() {
-                add(Target::Previous, say("其他", "Other"), true)?;
-            }
+        let on = agent.current == Some(Target::Pontex);
+        let side = if !usable {
+            Some(text(zh, agent.status.code))
+        } else if on {
+            None
         } else {
-            let added = agent.current == Some(Target::Pontex);
-            items.push(Box::new(MenuItem::with_id(
-                app,
-                format!("apply:{}", agent.id.key()),
-                say("添加 PonteX 模型", "Add PonteX models"),
-                usable && snapshot.connected && !added,
-                None::<&str>,
-            )?));
-            items.push(Box::new(MenuItem::with_id(
-                app,
-                format!("launch:{}", agent.id.key()),
-                say("打开 WorkBuddy", "Open WorkBuddy"),
-                usable,
-                None::<&str>,
-            )?));
+            Some(text(zh, agent.status.code))
+        };
+        let label = match side {
+            Some(side) => format!("{}  ·  {side}", agent.label),
+            None => agent.label.to_string(),
+        };
+        menu.append(&CheckMenuItem::with_id(
+            app,
+            format!("toggle:{}", agent.id.key()),
+            label,
+            usable && (snapshot.connected || on),
+            on,
+            None::<&str>,
+        )?)?;
+    }
+    // 最近的文件夹：点一下就用上次那个 Agent 在那里打开。
+    let recents: Vec<_> = super::places::list().into_iter().take(5).collect();
+    if !recents.is_empty() {
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(&MenuItem::with_id(app, "heading-folders", say("最近的文件夹", "Recent folders"), false, None::<&str>)?)?;
+        for (index, folder) in recents.iter().enumerate() {
+            menu.append(&MenuItem::with_id(app, format!("folder:{index}"), &folder.name, true, None::<&str>)?)?;
         }
-        let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = items.iter().map(|i| i.as_ref()).collect();
-        menu.append(&Submenu::with_items(app, label, true, &refs)?)?;
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
+    let open = if zh { format!("打开 {name}") } else { format!("Open {name}") };
+    menu.append(&MenuItem::with_id(app, "open", open, true, None::<&str>)?)?;
     let quit = if zh { format!("退出 {name}") } else { format!("Quit {name}") };
     menu.append(&MenuItem::with_id(app, "quit", quit, true, None::<&str>)?)?;
     Ok(menu)
 }
 
-fn target_key(target: Target) -> &'static str {
-    match target {
-        Target::Pontex => "pontex",
-        Target::Native => "native",
-        Target::Previous => "previous",
-    }
-}
-
 fn on_menu(app: &AppHandle, id: &str) {
     let mut parts = id.split(':');
-    match (parts.next(), parts.next().and_then(AgentId::parse), parts.next()) {
-        (Some("open"), ..) => super::app::show_main(app),
-        (Some("quit"), ..) => app.exit(0),
-        (Some("switch"), Some(agent), Some(target)) => {
-            let target = match target {
-                "pontex" => Target::Pontex,
-                "native" => Target::Native,
-                _ => Target::Previous,
-            };
-            spawn_switch(app, agent, target);
+    match (parts.next(), parts.next()) {
+        (Some("open"), _) => super::app::show_main(app),
+        (Some("quit"), _) => app.exit(0),
+        (Some("toggle"), Some(agent)) => {
+            let Some(agent) = AgentId::parse(agent) else { return };
+            let runtime = app.state::<Runtime>();
+            let Ok(core) = runtime.core() else { return };
+            let on = core.snapshot().agents.iter().any(|a| a.id == agent && a.current == Some(Target::Pontex));
+            if agent.switchable() {
+                spawn_switch(app, agent, if on { Target::Native } else { Target::Pontex });
+            } else if on {
+                spawn_disconnect(app, agent);
+            } else {
+                spawn_switch(app, agent, Target::Pontex);
+            }
         }
-        (Some("apply"), Some(agent), _) => spawn_switch(app, agent, Target::Pontex),
-        (Some("launch"), Some(_), _) => {
-            tauri::async_runtime::spawn(async {
-                if let Err(error) = super::upstream::open_workbuddy().await {
-                    log::warn!("[PONTEX] 打开 WorkBuddy 失败: {error}");
+        (Some("folder"), Some(index)) => {
+            let Some(folder) = index.parse::<usize>().ok().and_then(|i| super::places::list().into_iter().nth(i)) else { return };
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = super::app::launch(&app, folder.agent, folder.path).await {
+                    log::warn!("[PONTEX] 从菜单栏打开文件夹失败: {error}");
+                    super::app::show_main(&app);
                 }
             });
         }
         _ => {}
     }
+}
+
+fn spawn_disconnect(app: &AppHandle, agent: AgentId) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if super::app::disconnect(&app, Some(agent)).await.is_err() {
+            super::app::show_main(&app);
+        }
+    });
 }
 
 fn spawn_switch(app: &AppHandle, agent: AgentId, target: Target) {

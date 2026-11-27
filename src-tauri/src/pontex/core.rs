@@ -127,6 +127,11 @@ impl Core {
         Ok(())
     }
 
+    /// 上游引擎：AI 工具箱的 MCP 走它。写之前先拿 `op` 锁（和切换写同一批文件）。
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
     pub fn prefs(&self) -> Prefs {
         self.locked().prefs.clone()
     }

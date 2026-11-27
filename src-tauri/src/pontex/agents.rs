@@ -109,7 +109,7 @@ fn managed(id: AgentId) -> Option<String> {
     super::installer::layout::Layout::new(upstream::device_dir()).managed(id)
 }
 
-fn find_executable(name: &str) -> Option<PathBuf> {
+pub(crate) fn find_executable(name: &str) -> Option<PathBuf> {
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).collect())
         .unwrap_or_default();

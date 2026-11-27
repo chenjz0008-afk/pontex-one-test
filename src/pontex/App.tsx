@@ -4,17 +4,20 @@ import { pickLanguage, type T } from "./i18n";
 import { Connect } from "./Connect";
 import { Home } from "./Home";
 import { Settings } from "./Settings";
+import { Toolbox } from "./Toolbox";
 import { SkillDialog } from "./Skill";
 import { Fatal } from "./Fatal";
-import { Brand, Button } from "./ui";
+import { Brand, Button, ToastProvider } from "./ui";
+
+type Page = "home" | "toolbox" | "settings" | "connect";
 
 const isMac = navigator.userAgent.includes("Mac");
 
 export function App() {
   const [view, setView] = useState<View | null>(null);
-  const [page, setPage] = useState<"home" | "settings" | "connect">("home");
+  const [page, setPage] = useState<Page>("home");
   const [skill, setSkill] = useState<string | null>(null);
-  const [focus, setFocus] = useState<"skills" | undefined>();
+  const [toolboxTab, setToolboxTab] = useState<"skills" | "mcp">("skills");
 
   useEffect(() => {
     let alive = true;
@@ -39,7 +42,6 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = t.lang === "zh" ? "zh-CN" : "en";
   }, [t]);
-  const home = useCallback(() => setPage("home"), []);
   // 接入一成功广播就到了，但结果页还要给用户看：点了「完成」或去了设置才算走完。
   const connected = snapshot?.connected;
   const [onboarding, setOnboarding] = useState(false);
@@ -47,33 +49,37 @@ export function App() {
     if (connected === false) setOnboarding(true);
   }, [connected]);
   const go = useCallback(
-    (next: "home" | "settings" | "connect") => {
+    (next: Page) => {
       if (connected) setOnboarding(false);
-      setFocus(undefined);
       setPage(next);
     },
     [connected],
   );
+  // 还没连上 PonteX：只有连接页和设置，不显示 Agent / AI 工具箱。
+  const tabs = Boolean(snapshot?.connected) && !onboarding && page !== "connect";
 
   return (
+    <ToastProvider t={t}>
     <div className={isMac ? "app mac" : "app"}>
       <header data-tauri-drag-region>
         <Brand t={t} />
+        {tabs && (
+          <nav className="tabs" aria-label="PonteX One">
+            <button type="button" className={page === "home" ? "on" : undefined} aria-current={page === "home" ? "page" : undefined} onClick={() => go("home")}>{t.tabAgents}</button>
+            <button type="button" className={page === "toolbox" ? "on" : undefined} aria-current={page === "toolbox" ? "page" : undefined} onClick={() => go("toolbox")}>{t.tabToolbox}</button>
+          </nav>
+        )}
         <div className="header-end">
-          {snapshot?.connected && page === "home" && (
-            <>
-              <span className="key-chip" title={t.keySection}>{snapshot.key_hint}…</span>
-              <Button kind="quiet" onClick={() => go("settings")}>{t.settings}</Button>
-            </>
+          {snapshot && page !== "connect" && (
+            <button type="button" className={page === "settings" ? "btn quiet on" : "btn quiet"} aria-current={page === "settings" ? "page" : undefined} onClick={() => go(page === "settings" && !tabs ? "home" : "settings")}>
+              {t.settings}
+            </button>
           )}
-          {snapshot && !snapshot.connected && page === "home" && (
-            <Button kind="quiet" onClick={() => go("settings")}>{t.settings}</Button>
-          )}
-          {page !== "home" && <Button kind="quiet" onClick={home}>{t.back}</Button>}
+          {page === "connect" && <Button kind="quiet" onClick={() => go("home")}>{t.back}</Button>}
         </div>
       </header>
       <main>
-        <Body view={view} snapshot={snapshot} t={t} page={page} setPage={go} onboarding={onboarding} focus={focus} />
+        <Body view={view} snapshot={snapshot} t={t} page={page} setPage={go} onboarding={onboarding} toolboxTab={toolboxTab} onToolboxTab={setToolboxTab} />
       </main>
       {skill && snapshot && (
         <SkillDialog
@@ -83,12 +89,13 @@ export function App() {
           onClose={() => setSkill(null)}
           onManage={() => {
             setSkill(null);
-            go("settings");
-            setFocus("skills");
+            setToolboxTab("skills");
+            go("toolbox");
           }}
         />
       )}
     </div>
+    </ToastProvider>
   );
 }
 
@@ -96,17 +103,19 @@ function Body(props: {
   view: View | null;
   snapshot: Snapshot | null;
   t: T;
-  page: "home" | "settings" | "connect";
-  setPage: (page: "home" | "settings" | "connect") => void;
+  page: Page;
+  setPage: (page: Page) => void;
   onboarding: boolean;
-  focus?: "skills";
+  toolboxTab: "skills" | "mcp";
+  onToolboxTab: (tab: "skills" | "mcp") => void;
 }) {
-  const { view, snapshot, t, page, setPage, onboarding, focus } = props;
+  const { view, snapshot, t, page, setPage, onboarding } = props;
   if (!view) return <p className="center muted">{t.checking}</p>;
   if (view.kind === "failed") return <Fatal error={view.error} t={t} />;
   if (!snapshot) return null;
-  if (page === "settings") return <Settings key={focus ?? ""} snapshot={snapshot} t={t} focus={focus} onConnect={() => setPage("connect")} />;
+  if (page === "settings") return <Settings snapshot={snapshot} t={t} onConnect={() => setPage("connect")} />;
   if (page === "connect" || onboarding || !snapshot.connected)
     return <Connect snapshot={snapshot} t={t} onDone={() => setPage("home")} />;
+  if (page === "toolbox") return <Toolbox snapshot={snapshot} t={t} tab={props.toolboxTab} onTab={props.onToolboxTab} />;
   return <Home snapshot={snapshot} t={t} />;
 }

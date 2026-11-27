@@ -35,7 +35,7 @@ const zh = {
   rotatedNotice: (at: string) => `这是轮换前的旧 Key，将于 ${at} 失效。`,
   // 首页
   homeTitle: "我的 Agent",
-  newSession: "切换后，新打开的会话生效。",
+  newSession: "切换 PonteX / 原生后，要把正在运行的 Agent 彻底关闭，再重新打开才生效。",
   notConnectedTitle: "还没有连接 PonteX",
   connect: "连接 PonteX",
   native: "原生",
@@ -87,7 +87,7 @@ const zh = {
   rotateHint: "只更新正在使用 PonteX 的 Agent，其余不变。",
   update: "更新 Key",
   rotated: "Key 已更新",
-  rotatedBody: (names: string) => `Key 已更新，${names} 已换成新 Key。新打开的会话生效。`,
+  rotatedBody: (names: string) => `Key 已更新，${names} 已换成新 Key。把正在运行的 Agent 彻底关闭，再重新打开才生效。`,
   // 技能
   skillTitle: "安装技能",
   skillLoading: "正在获取技能信息…",
@@ -97,7 +97,7 @@ const zh = {
   skillEmptyHint: "在 PonteX Skills 网站上点「安装」，会回到这里确认。",
   skillBrowse: "浏览技能",
   skillManage: "管理已装技能",
-  skillUsage: "新开一个会话后生效。可以在「设置 → 技能」里查看和移除。",
+  skillUsage: "把正在运行的 Agent 彻底关闭、再重新打开后生效。可以在「AI 工具箱 → 技能」里启用或停用。",
   skillPlace: (label: string, v: string) => `${label} · 版本 ${v}`,
   skillEdited: "你改过",
   skillRemoveTitle: (title: string) => `移除「${title}」`,
@@ -180,6 +180,86 @@ const zh = {
     STARTUP: "启动时遇到了问题。请重试，还不行就导出诊断信息发给我们。",
   } as Record<string, string>,
   download: "下载最新版",
+  // v2 界面：Agent / AI 工具箱 / 设置
+  tabAgents: "Agent",
+  tabToolbox: "AI 工具箱",
+  summary: (installed: number, using: number) => `${installed} 个 Agent 已安装 · ${using} 个已启用 PonteX`,
+  restartNote: "切换 PonteX / 原生后，要把正在运行的 Agent 彻底关闭，再重新打开才生效。",
+  switchedTo: (name: string, target: "pontex" | "native" | "previous") =>
+    target === "pontex" ? `${name} 已切到 PonteX` : target === "native" ? `${name} 已切到原生` : `${name} 已切回原来的配置`,
+  restartOne: (name: string) => `把正在运行的 ${name} 彻底关闭，再重新打开才生效`,
+  restartAll: "把正在运行的 Agent 彻底关闭，再重新打开才生效",
+  undo: "撤销",
+  open: "打开",
+  openWhere: (name: string) => `在哪个文件夹里打开 ${name}`,
+  searchFolders: (n: number) => `搜索用过的 ${n} 个文件夹`,
+  noFolderMatch: (q: string) => `没有找到「${q}」`,
+  pickFolder: "选择文件夹…",
+  newFolder: "新建文件夹…",
+  forgetFolder: "从列表里移除（文件夹不动）",
+  forgotFolder: (name: string) => `已从列表里移除「${name}」`,
+  folderUntouched: "文件夹本身没动",
+  firstLaunch: (name: string) => `会打开一个终端窗口，${name} 已在你选的文件夹里启动好，直接打字说要做什么就行。`,
+  newFolderName: "新文件夹的名字",
+  newFolderIn: "建在",
+  newFolderInTail: "里",
+  changeOnce: "换个位置",
+  createAndOpen: "新建并打开",
+  launched: (name: string, folder: string) => `已在「${folder}」里打开 ${name}`,
+  launchedSub: "终端窗口在最前面，直接打字说要做什么就行",
+  dirNames: { Documents: "文稿", Desktop: "桌面", Downloads: "下载" } as Record<string, string>,
+  skillsTab: "技能",
+  mcpTab: "MCP",
+  enabledIn: "启用于",
+  browseSkills: "浏览更多技能",
+  addMcp: "添加 MCP",
+  skillsNote: "图标亮着 = 已在这个 Agent 里启用。点一下就启用或停用；停用不会删掉，随时能再启用。",
+  mcpNote: "图标亮着 = 已在这个 Agent 里启用。名字前的点：绿色能用，黄色要先登录，红色连不上。",
+  importedNotice: (n: number) => `已读入各 Agent 里现有的 ${n} 个 MCP，原配置没动。`,
+  noSkills: "还没有技能。在 PonteX Skills 网站上点「安装」，就会出现在这里。",
+  noMcps: "还没有 MCP。点右上角「添加 MCP」，常用的点一下就能加。",
+  noAgentsYet: "先在 Agent 页装一个 Agent，再来这里启用。",
+  toggleTip: (agent: string, on: boolean) => `${agent} · ${on ? "已启用" : "未启用"}`,
+  toggleFailed: (agent: string) => `启用到 ${agent} 失败`,
+  health: { ok: "能用", login: "要先登录", failed: "连不上", checking: "正在检查" } as Record<string, string>,
+  edit: "编辑",
+  remove: "删除",
+  mcpDeleted: (name: string) => `已删除 ${name}`,
+  mcpDeletedSub: "已从各 Agent 的配置里移除",
+  mcpEditTitle: (name: string) => `编辑 ${name}`,
+  mcpTarget: "命令或网址",
+  mcpTargetHint: "npx -y @scope/server　或　https://…　或　直接粘贴 README 里的 JSON",
+  mcpName: "名称",
+  mcpEnv: "环境变量",
+  mcpHeaders: "请求头",
+  mcpRecognized: (name: string, n: number, headers: boolean) => `认出来了：${name}${n ? `，带 ${n} 个${headers ? "请求头" : "环境变量"}` : ""}`,
+  mcpJsonIncomplete: "JSON 还没贴完整",
+  mcpNeedTarget: "填一个命令或网址",
+  mcpStatus: "状态",
+  save: "保存",
+  add: "添加",
+  mcpAdded: (name: string) => `已添加 ${name}`,
+  mcpAddedSub: (agents: string) => (agents ? `已在 ${agents} 里启用` : "暂时没在任何 Agent 里启用"),
+  mcpSaved: (name: string) => `已保存 ${name}`,
+  presets: { fetch: "抓网页内容", context7: "查最新的库文档", playwright: "操作浏览器", memory: "跨会话记住事情", time: "时间与时区" } as Record<string, string>,
+  keyEnabled: "已启用",
+  keyChange: "更换",
+  keyChangeTitle: "更换 API Key",
+  keyPaste: "粘贴新的 Key，会自动检查能不能用",
+  keyGet: "去控制台拿 Key",
+  keyValid: "✓ 有效",
+  keyWillApply: (names: string) => (names ? `保存后会启用到 ${names}` : "保存后，接入 PonteX 的 Agent 都用它"),
+  keySaved: (n: number) => `已换成新的 Key，并更新到 ${n} 个 Agent`,
+  foldersSection: "打开文件夹",
+  foldersDefault: "新建的文件夹默认放在",
+  foldersDefaultHint: (cloud: string) => `在你的个人文件夹里，不会被 ${cloud} 同步`,
+  change: "更改…",
+  openFolderToo: "同时打开这个文件夹",
+  openFolderTooHint: (finder: string) => `先在${finder}里打开文件夹，再打开终端：Agent 建了什么文件，一眼就能看到`,
+  terminal: "用哪个终端",
+  terminalHint: "只列出你电脑上装了的",
+  terminals: { terminal: "终端（系统自带）", iterm: "iTerm", wt: "Windows 终端", powershell: "PowerShell" } as Record<string, string>,
+  finder: (win: boolean): string => (win ? "资源管理器" : "访达"),
 };
 
 type Dict = typeof zh;
@@ -217,7 +297,7 @@ const en: Dict = {
   quotaNotice: "This key is valid but has no credit right now. You can set things up and verify later.",
   rotatedNotice: (at) => `This is the pre-rotation key and expires at ${at}.`,
   homeTitle: "My agents",
-  newSession: "Changes apply to newly opened sessions.",
+  newSession: "After switching, fully quit the running agent and open it again for the change to apply.",
   notConnectedTitle: "PonteX is not connected",
   connect: "Connect PonteX",
   native: "Native",
@@ -268,7 +348,7 @@ const en: Dict = {
   rotateHint: "Only agents using PonteX are updated.",
   update: "Update key",
   rotated: "Key updated",
-  rotatedBody: (names) => `Key updated for ${names}. Applies to newly opened sessions.`,
+  rotatedBody: (names) => `Key updated for ${names}. Fully quit running agents and open them again to apply.`,
   skillTitle: "Install skill",
   skillLoading: "Looking up the skill…",
   skillFetching: (v) => `From PonteX Skills · version ${v}, downloading and verifying…`,
@@ -360,6 +440,85 @@ const en: Dict = {
     STARTUP: "Something went wrong while starting. Try again, or export diagnostics and send them to us.",
   },
   download: "Download latest",
+  tabAgents: "Agents",
+  tabToolbox: "AI Toolbox",
+  summary: (installed, using) => `${installed} agent${installed === 1 ? "" : "s"} installed · ${using} using PonteX`,
+  restartNote: "After switching between PonteX and native, fully quit the running agent and open it again for the change to apply.",
+  switchedTo: (name, target) =>
+    target === "pontex" ? `${name} now uses PonteX` : target === "native" ? `${name} now uses native` : `${name} is back to its previous setup`,
+  restartOne: (name) => `Fully quit the running ${name} and open it again to apply`,
+  restartAll: "Fully quit running agents and open them again to apply",
+  undo: "Undo",
+  open: "Open",
+  openWhere: (name) => `Open ${name} in a folder`,
+  searchFolders: (n) => `Search ${n} recent folders`,
+  noFolderMatch: (q) => `Nothing matches “${q}”`,
+  pickFolder: "Choose folder…",
+  newFolder: "New folder…",
+  forgetFolder: "Remove from list (the folder stays)",
+  forgotFolder: (name) => `Removed “${name}” from the list`,
+  folderUntouched: "The folder itself is untouched",
+  firstLaunch: (name) => `A terminal window opens with ${name} already running in the folder you pick. Just type what you want done.`,
+  newFolderName: "Name of the new folder",
+  newFolderIn: "Created in",
+  newFolderInTail: "",
+  changeOnce: "Change location",
+  createAndOpen: "Create and open",
+  launched: (name, folder) => `Opened ${name} in “${folder}”`,
+  launchedSub: "The terminal window is in front — just type what you want done",
+  dirNames: { Documents: "Documents", Desktop: "Desktop", Downloads: "Downloads" },
+  skillsTab: "Skills",
+  mcpTab: "MCP",
+  enabledIn: "Enabled in",
+  browseSkills: "Browse skills",
+  addMcp: "Add MCP",
+  skillsNote: "A lit icon means the skill is enabled in that agent. Click to enable or disable; disabling never deletes it.",
+  mcpNote: "A lit icon means the server is enabled in that agent. Dot before the name: green works, yellow needs sign-in, red can't connect.",
+  importedNotice: (n) => `Read ${n} existing MCP server${n === 1 ? "" : "s"} from your agents. Their configs were not changed.`,
+  noSkills: "No skills yet. Click “Install” on the PonteX Skills site and they show up here.",
+  noMcps: "No MCP servers yet. Click “Add MCP” — common ones are one click away.",
+  noAgentsYet: "Install an agent on the Agents tab first, then enable things here.",
+  toggleTip: (agent, on) => `${agent} · ${on ? "enabled" : "not enabled"}`,
+  toggleFailed: (agent) => `Couldn't enable in ${agent}`,
+  health: { ok: "Works", login: "Needs sign-in", failed: "Can't connect", checking: "Checking" },
+  edit: "Edit",
+  remove: "Delete",
+  mcpDeleted: (name) => `Deleted ${name}`,
+  mcpDeletedSub: "Removed from every agent's config",
+  mcpEditTitle: (name) => `Edit ${name}`,
+  mcpTarget: "Command or URL",
+  mcpTargetHint: "npx -y @scope/server, https://…, or paste the JSON from a README",
+  mcpName: "Name",
+  mcpEnv: "Environment variables",
+  mcpHeaders: "Headers",
+  mcpRecognized: (name, n, headers) => `Recognized ${name}${n ? ` with ${n} ${headers ? "header" : "variable"}${n === 1 ? "" : "s"}` : ""}`,
+  mcpJsonIncomplete: "The JSON isn't complete yet",
+  mcpNeedTarget: "Enter a command or URL",
+  mcpStatus: "Status",
+  save: "Save",
+  add: "Add",
+  mcpAdded: (name) => `Added ${name}`,
+  mcpAddedSub: (agents) => (agents ? `Enabled in ${agents}` : "Not enabled in any agent yet"),
+  mcpSaved: (name) => `Saved ${name}`,
+  presets: { fetch: "Fetch web pages", context7: "Up-to-date library docs", playwright: "Drive a browser", memory: "Remember across sessions", time: "Time and time zones" },
+  keyEnabled: "Enabled",
+  keyChange: "Change",
+  keyChangeTitle: "Change API key",
+  keyPaste: "Paste the new key — it's checked automatically",
+  keyGet: "Get a key in the console",
+  keyValid: "✓ Valid",
+  keyWillApply: (names) => (names ? `Saving applies it to ${names}` : "Agents connected to PonteX will use it"),
+  keySaved: (n) => `Switched to the new key and updated ${n} agent${n === 1 ? "" : "s"}`,
+  foldersSection: "Opening folders",
+  foldersDefault: "New folders go in",
+  foldersDefaultHint: (cloud) => `In your home folder, not synced by ${cloud}`,
+  change: "Change…",
+  openFolderToo: "Also open the folder",
+  openFolderTooHint: (finder) => `Shows the folder in ${finder} first, then opens the terminal, so you can see what the agent creates`,
+  terminal: "Terminal",
+  terminalHint: "Only the ones installed on this computer",
+  terminals: { terminal: "Terminal (built in)", iterm: "iTerm", wt: "Windows Terminal", powershell: "PowerShell" },
+  finder: (win) => (win ? "File Explorer" : "Finder"),
 };
 
 export type T = Dict & { lang: "zh" | "en" };
@@ -374,6 +533,15 @@ export function pickLanguage(pref: string | null | undefined): T {
 /** 原因码 → 一句话。没有收录的原样给出，方便反馈。 */
 const REASONS: Record<string, [string, string]> = {
   KEY_FORMAT: ["请输入 px- 开头的 API Key。", "Enter an API key that starts with px-."],
+  FOLDER_NAME_EMPTY: ["给文件夹起个名字。", "Give the folder a name."],
+  FOLDER_NAME_CHARS: ["名字里不能有 \\ / : * ? \" < > | 这些符号。", "The name can't contain \\ / : * ? \" < > |."],
+  FOLDER_NAME_DOT: ["名字不能以 . 开头（会变成隐藏文件夹）。", "The name can't start with a dot (it would be hidden)."],
+  FOLDER_NAME_LONG: ["名字太长了，短一点。", "That name is too long."],
+  FOLDER_EXISTS: ["这里已经有同名的文件夹了，换个名字，或者返回直接打开它。", "A folder with that name is already there. Pick another name, or go back and open it."],
+  FOLDER_MISSING: ["这个文件夹不在了，可能被删掉或移走了。", "That folder is gone — it may have been deleted or moved."],
+  NOT_A_CLI: ["这个 Agent 不在终端里用。", "This agent doesn't run in a terminal."],
+  SKILL_MISSING: ["找不到这个技能的文件了。", "This skill's files are missing."],
+  MCP_NAME_EMPTY: ["给它起个名字。", "Give it a name."],
   PROVISIONING_KEY_NOT_FOR_INFERENCE: ["这是管理密钥（pxp-），请改用 px- 开头的 API Key。", "This is a provisioning key (pxp-). Use an API key that starts with px-."],
   API_KEY_REQUIRED: ["请输入 Key。", "Enter a key."],
   INVALID_API_KEY: ["Key 不正确，或轮换后的旧 Key 已过宽限期。", "The key is wrong, or it was rotated and has expired."],
@@ -436,6 +604,11 @@ export function reason(t: T, code: string | null | undefined): string {
   }
   const known = REASONS[code];
   if (known) return known[t.lang === "zh" ? 0 : 1];
+  const tail = (prefix: string) => code.slice(prefix.length).replace(/^:\s*/, "");
+  if (code.startsWith("TERMINAL_FAILED"))
+    return t.lang === "zh" ? `终端没能打开：${tail("TERMINAL_FAILED")}` : `Couldn't open the terminal: ${tail("TERMINAL_FAILED")}`;
+  if (code.startsWith("FOLDER_CREATE"))
+    return t.lang === "zh" ? `文件夹没能建好：${tail("FOLDER_CREATE")}` : `Couldn't create the folder: ${tail("FOLDER_CREATE")}`;
   const http = /^HTTP_(\d+)$/.exec(code);
   if (http) return t.lang === "zh" ? `请求失败（${http[1]}）` : `Request failed (${http[1]})`;
   return code;
@@ -466,15 +639,15 @@ export function statusText(t: T, agent: Agent): string {
     case "other":
       return z ? `正在使用 ${detail}` : `Using ${detail}`;
     case "verified":
-      return z ? "使用 PonteX · 已验证" : "Using PonteX · verified";
+      return z ? "已启用 PonteX" : "Using PonteX";
     case "written":
-      return z ? "使用 PonteX · 已写入，未验证" : "Using PonteX · written, not verified";
+      return z ? "已启用 PonteX · 还没验证" : "Using PonteX · not verified yet";
     case "verify-failed":
-      return `${z ? "使用 PonteX · " : "Using PonteX · "}${reason(t, detail)}`;
+      return `${z ? "已启用 PonteX · " : "Using PonteX · "}${reason(t, detail)}`;
     case "native":
-      return detail ? `${z ? "使用原生" : "Using native"} · ${detail}` : z ? "使用原生" : "Using native";
+      return detail ? `${z ? "原生" : "Native"} · ${detail}` : z ? "原生" : "Native";
     case "added":
-      return z ? "PonteX 模型已添加 · 在 WorkBuddy 里选用" : "PonteX models added · select them in WorkBuddy";
+      return z ? "已添加 PonteX 模型 · 在 WorkBuddy 里选用" : "PonteX models added · pick them in WorkBuddy";
     case "not-added":
       return z ? "未添加 PonteX 模型" : "PonteX models not added";
   }
@@ -515,6 +688,7 @@ export type Tone = "ok" | "idle" | "warn" | "bad";
 export function tone(agent: Agent): Tone {
   switch (agent.status.code) {
     case "verified":
+    case "added":
       return "ok";
     case "unreadable":
     case "failed":

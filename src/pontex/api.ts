@@ -149,7 +149,60 @@ export interface Prefs {
   language: string | null;
   close_to_tray: boolean;
   coexist_notice_seen: boolean;
+  /** 新建的文件夹默认放在哪；空 = 个人文件夹里的 PonteX。 */
+  folders_dir: string | null;
+  /** 在文件夹里打开 Agent 时，先打开这个文件夹。 */
+  open_folder: boolean;
+  /** 用哪个终端；空 = 系统自带。 */
+  terminal: string | null;
+  /** 在文件夹里打开过一次 Agent（之后不再显示说明）。 */
+  launched_once: boolean;
+  toolbox_notice_seen: boolean;
 }
+
+/** 用过的文件夹，最近的在前。 */
+export interface Folder {
+  path: string;
+  name: string;
+  parent: string;
+  agent: AgentId;
+}
+
+export interface Recent {
+  path: string;
+  agent: AgentId;
+  at: number;
+}
+
+export interface Folders {
+  recents: Folder[];
+  default_dir: string;
+  terminals: string[];
+}
+
+export interface ToolSkill {
+  dir: string;
+  name: string;
+  description: string;
+  on: AgentId[];
+}
+
+export interface ToolMcp {
+  id: string;
+  name: string;
+  server: Record<string, unknown>;
+  on: AgentId[];
+}
+
+export interface Toolbox {
+  skills: ToolSkill[];
+  skill_agents: AgentId[];
+  mcps: ToolMcp[];
+  mcp_agents: AgentId[];
+  imported: number;
+}
+
+export type McpHealth = "ok" | "login" | "failed";
 
 export interface Snapshot {
   version: string;
@@ -268,6 +321,26 @@ export const api = {
   uninstall: (agent: AgentId) => invoke<void>("px_uninstall", { agent }),
   skillRemove: (slug: string, agent: AgentId) =>
     invoke<void>("px_skill_remove", { slug, agent }),
+  // 在文件夹里打开
+  folders: () => invoke<Folders>("px_folders"),
+  launch: (agent: AgentId, path: string) => invoke<void>("px_launch", { agent, path }),
+  newFolder: (name: string, parent: string | null) =>
+    invoke<string>("px_new_folder", { name, parent }),
+  pickFolder: (start: string | null) => invoke<string | null>("px_pick_folder", { start }),
+  forgetFolder: (path: string) =>
+    invoke<[number, Recent] | null>("px_forget_folder", { path }),
+  restoreFolder: (index: number, recent: Recent) =>
+    invoke<void>("px_restore_folder", { index, recent }),
+  // AI 工具箱
+  toolbox: () => invoke<Toolbox>("px_toolbox"),
+  skillToggle: (dir: string, agent: AgentId, enabled: boolean) =>
+    invoke<void>("px_skill_toggle", { dir, agent, enabled }),
+  mcpToggle: (id: string, agent: AgentId, enabled: boolean) =>
+    invoke<void>("px_mcp_toggle", { id, agent, enabled }),
+  mcpSave: (id: string | null, name: string, server: Record<string, unknown>, on: AgentId[]) =>
+    invoke<string>("px_mcp_save", { id, name, server, on }),
+  mcpDelete: (id: string) => invoke<void>("px_mcp_delete", { id }),
+  mcpCheck: (ids: string[]) => invoke<[string, McpHealth][]>("px_mcp_check", { ids }),
 };
 
 export const onState = (handler: (view: View) => void) =>

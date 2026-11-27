@@ -2,15 +2,18 @@ import { useEffect, useState } from "react";
 import { api, type Agent, type AgentId, type Outcome, type Progress, type Snapshot, type Target } from "./api";
 import { actionText, reason, statusText, timeText, tone, type T } from "./i18n";
 import { active, Bar, cancellable, MirrorCommand, phaseText, useInstaller } from "./Install";
-import { AgentIcon, Button, Dialog, Notice } from "./ui";
+import { OpenButton, opensIn } from "./Launch";
+import { AgentIcon, Button, Dialog, Notice, useToast } from "./ui";
 
 export function Home({ snapshot, t }: { snapshot: Snapshot; t: T }) {
   const [open, setOpen] = useState<AgentId | null>(null);
   const [busy, setBusy] = useState<AgentId | null>(null);
   const [message, setMessage] = useState<{ bad: boolean; text: string } | null>(null);
-  const [checking, setChecking] = useState(false);
   const [asking, setAsking] = useState<{ agent: Agent; what: "remove" | "restore" } | null>(null);
   const { progress, missing, install, dialog, notice } = useInstaller(snapshot, t);
+  const toast = useToast();
+  const installed = snapshot.agents.filter((a) => a.install.state === "installed");
+  const using = installed.filter((a) => a.current === "pontex");
   // 说明类的提示看过就走，出错的留着。
   useEffect(() => {
     if (!message || message.bad) return;
@@ -18,38 +21,45 @@ export function Home({ snapshot, t }: { snapshot: Snapshot; t: T }) {
     return () => clearTimeout(timer);
   }, [message]);
 
-  async function act(agent: AgentId, work: () => Promise<Outcome | Outcome[] | unknown>) {
+  async function act(agent: AgentId, work: () => Promise<Outcome | Outcome[] | unknown>): Promise<boolean> {
     setBusy(agent);
     setMessage(null);
     try {
       const result = await work();
       const outcome = (Array.isArray(result) ? result[0] : result) as Partial<Outcome> | null;
-      if (outcome?.error) setMessage({ bad: true, text: reason(t, outcome.error) });
-      else if (outcome?.locked_sessions)
-        setMessage({ bad: false, text: t.lockedSessions(outcome.locked_sessions) });
+      if (outcome?.error) {
+        setMessage({ bad: true, text: reason(t, outcome.error) });
+        return false;
+      }
+      if (outcome?.locked_sessions) setMessage({ bad: false, text: t.lockedSessions(outcome.locked_sessions) });
+      return true;
     } catch (cause) {
       setMessage({ bad: true, text: reason(t, String(cause)) });
+      return false;
     } finally {
       setBusy(null);
     }
   }
 
+  /** 切 PonteX / 原生：说清楚要彻底关闭再打开才生效，能撤销。 */
+  async function pick(agent: Agent, target: Target) {
+    const before = agent.current;
+    const ok = await act(agent.id, () => api.switch(agent.id, target));
+    if (!ok) return;
+    toast({
+      text: t.switchedTo(agent.label, target),
+      sub: t.restartOne(agent.label),
+      undo: before && before !== target ? () => act(agent.id, () => api.switch(agent.id, before)) : undefined,
+    });
+  }
+
   return (
     <section>
-      <div className="title-row">
-        <h1>{t.homeTitle}</h1>
+      <h1 className="sr-only">{t.homeTitle}</h1>
+      <div className="page-head">
+        <span className="summary">{t.summary(installed.length, using.length)}</span>
         <span className="agent-actions">
-        {missing.length > 1 && <Button kind="plain" onClick={() => install(missing)}>{t.installAll(missing.length)}</Button>}
-        <Button
-          kind="quiet"
-          busy={checking}
-          onClick={() => {
-            setChecking(true);
-            void api.refresh(true).finally(() => setChecking(false));
-          }}
-        >
-          {t.recheck}
-        </Button>
+          {missing.length > 1 && <Button kind="plain" onClick={() => install(missing)}>{t.installAll(missing.length)}</Button>}
         </span>
       </div>
       {snapshot.cc_switch_present && !snapshot.prefs.coexist_notice_seen && (
@@ -86,6 +96,8 @@ export function Home({ snapshot, t }: { snapshot: Snapshot; t: T }) {
             open={open === agent.id}
             toggle={() => setOpen(open === agent.id ? null : agent.id)}
             act={(work) => void act(agent.id, work)}
+            pick={(target) => void pick(agent, target)}
+            firstTime={!snapshot.prefs.launched_once}
             progress={progress[agent.id]}
             connected={snapshot.connected}
             onInstall={() => install([agent])}
@@ -93,7 +105,7 @@ export function Home({ snapshot, t }: { snapshot: Snapshot; t: T }) {
           />
         ))}
       </ul>
-      <p className="note">{t.newSession}</p>
+      <p className="note">{t.restartNote}</p>
       {dialog}
       {asking && (
         <Dialog
@@ -132,6 +144,8 @@ function Row(props: {
   connected: boolean;
   onInstall: () => void;
   ask: (what: "remove" | "restore") => void;
+  pick: (target: Target) => void;
+  firstTime: boolean;
 }) {
   const { agent, t, act, progress } = props;
   const busy = active(progress);
@@ -155,7 +169,11 @@ function Row(props: {
         return undefined;
     }
   };
-  const label = failed && !cancelled && agent.installable ? t.retry : agent.status.action === "install" && agent.installable ? t.install : actionText(t, agent);
+  // 最右边永远是一个：装了的是「打开」，能装的是「安装」。别的动作（验证、接入、查看）放在它左边。
+  const installButton = !busy && agent.installable && (agent.status.action === "install" || failed);
+  const opens = opensIn(agent);
+  const action = agent.status.action === "open-app" && opens ? null : agent.status.action;
+  const label = installButton ? "" : action === "install" && agent.installable ? "" : action ? actionText(t, agent) : "";
   return (
     <li className={props.open ? "open" : undefined}>
       <div className="agent-row">
@@ -182,11 +200,15 @@ function Row(props: {
             <Button kind="plain" onClick={() => void api.install([agent.id])}>{t.upgrade(agent.update)}</Button>
           )}
           {!busy && label && (
-            <Button kind={agent.installable ? "plain" : "quiet"} busy={props.busy} disabled={props.locked} onClick={run}>{label}</Button>
+            <Button kind="quiet" busy={props.busy} disabled={props.locked} onClick={run}>{label}</Button>
           )}
           {installed && agent.switchable && (
-            <Segment agent={agent} t={t} connected={props.connected} disabled={props.locked} onPick={(target) => act(() => api.switch(agent.id, target))} />
+            <Segment agent={agent} t={t} connected={props.connected} disabled={props.locked} onPick={props.pick} />
           )}
+          {installButton && (
+            <Button kind="plain" busy={props.busy} disabled={props.locked} onClick={run}>{failed && !cancelled ? t.retry : t.install}</Button>
+          )}
+          {!busy && opens && <OpenButton agent={agent} t={t} firstTime={props.firstTime} disabled={props.locked} />}
         </div>
       </div>
       {props.open && <Detail agent={agent} t={t} locked={props.locked || busy} act={act} ask={props.ask} />}

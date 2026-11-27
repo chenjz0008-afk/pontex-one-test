@@ -1,6 +1,7 @@
 name: PonteX Codex desktop e2e
 # 在真机上走一遍 Codex 桌面版的安装：真下载（多源并行）、真校验、真装进系统，
 # 再让它自带的 codex 按 PonteX 的配置发一次请求。
+# 顺带验证「在文件夹里打开」：真的打开文件夹和系统终端，命令在选的文件夹里跑起来。
 # Windows 上先卸掉 VC++ 运行库、模拟一台新电脑；再建一个普通账户，走「另一个管理员确认」那条路。
 #   推 pontex-e2e-* 标签或手动触发（改了安装相关代码、发版前跑）；日志在每台机器的 e2e-<系统> 产物里。
 #   省分钟数：按普通测试编译（不走发布优化），和日常检查共用编译缓存；macOS 一台 Apple 芯片、一台 Intel。
@@ -60,6 +61,11 @@ jobs:
             | jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null) | .executable' | tail -1 > out/test-exe.txt
           test -s out/test-exe.txt || { echo "找不到测试程序"; exit 1; }
           cat out/test-exe.txt
+      - name: Open an agent in a folder (real terminal)
+        # 「打开」按钮的真机验证：先打开文件夹，再打开系统终端、在选的文件夹里启动命令
+        run: |
+          set -o pipefail
+          "$(cat out/test-exe.txt)" --exact pontex::places::tests::a_real_terminal_starts_the_agent_in_the_folder --ignored --nocapture 2>&1 | tee out/launch.log
       - name: Check the test program itself needs no VC++ runtime
         if: runner.os == 'Windows'
         run: node tools/pontex.mjs deps "$(cat out/test-exe.txt)"

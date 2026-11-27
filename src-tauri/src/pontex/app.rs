@@ -17,7 +17,7 @@ use super::links::{self, Link};
 use super::skills::{self, Installed, Preview, Ready};
 use super::store::{Prefs, Target, Verify};
 use super::upstream::{self, Engine};
-use super::{autostart, diagnose, tray, verify};
+use super::{autostart, diagnose, places, toolbox, tray, verify};
 
 const EVENT_STATE: &str = "px://state";
 const EVENT_SKILL: &str = "px://skill";
@@ -58,7 +58,7 @@ impl Runtime {
     fn started(&self) -> Result<Arc<Core>, StartupError> {
         self.core.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
-    fn core(&self) -> Result<Arc<Core>, String> {
+    pub(crate) fn core(&self) -> Result<Arc<Core>, String> {
         self.started().map_err(|e| e.code.to_string())
     }
 }
@@ -300,18 +300,19 @@ async fn px_verify(
 }
 
 #[tauri::command]
-async fn px_disconnect(
-    app: AppHandle,
-    runtime: State<'_, Runtime>,
-    agent: Option<AgentId>,
-) -> Result<Vec<Outcome>, String> {
-    let core = runtime.core()?;
+async fn px_disconnect(app: AppHandle, agent: Option<AgentId>) -> Result<Vec<Outcome>, String> {
+    disconnect(&app, agent).await
+}
+
+/// 断开（还原到接入前）。托盘里取消 WorkBuddy 的勾也走这里。
+pub async fn disconnect(app: &AppHandle, agent: Option<AgentId>) -> Result<Vec<Outcome>, String> {
+    let core = app.state::<Runtime>().core()?;
     let outcomes = {
         let _guard = core.op.lock().await;
         let worker = core.clone();
         blocking(move || worker.disconnect(agent)).await?
     };
-    publish(&app);
+    publish(app);
     Ok(outcomes)
 }
 
@@ -351,6 +352,176 @@ async fn px_open(app: AppHandle, target: String, agent: Option<AgentId>) -> Resu
         _ => return Err("unknown target".into()),
     };
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+// ---------- 在文件夹里打开 ----------
+
+#[derive(Serialize)]
+struct Folders {
+    recents: Vec<places::Folder>,
+    /// 新建的文件夹默认放在这里。
+    default_dir: String,
+    /// 这台电脑上能用的终端，第一个是默认的。
+    terminals: Vec<&'static str>,
+}
+
+#[tauri::command]
+async fn px_folders(runtime: State<'_, Runtime>) -> Result<Folders, String> {
+    let custom = runtime.core()?.prefs().folders_dir;
+    blocking(move || Folders {
+        recents: places::list(),
+        default_dir: places::default_dir(custom.as_deref()).display().to_string(),
+        terminals: places::terminals(),
+    })
+    .await
+}
+
+#[tauri::command]
+async fn px_launch(app: AppHandle, agent: AgentId, path: String) -> Result<(), String> {
+    launch(&app, agent, path).await
+}
+
+/// 先打开文件夹，再打开终端、在里面启动 Agent；记进最近的文件夹。托盘也走这里。
+pub async fn launch(app: &AppHandle, agent: AgentId, path: String) -> Result<(), String> {
+    let core = app.state::<Runtime>().core()?;
+    let prefs = core.prefs();
+    let (open_folder, terminal) = (prefs.open_folder, prefs.terminal.clone());
+    blocking(move || places::launch(agent, std::path::Path::new(&path), open_folder, terminal.as_deref())).await??;
+    if !prefs.launched_once {
+        core.set_prefs(Prefs { launched_once: true, ..prefs })?;
+    }
+    publish(app);
+    Ok(())
+}
+
+/// 在默认位置（或 `parent`）里新建文件夹，返回它的路径。
+#[tauri::command]
+async fn px_new_folder(runtime: State<'_, Runtime>, name: String, parent: Option<String>) -> Result<String, String> {
+    let custom = runtime.core()?.prefs().folders_dir;
+    let parent = parent.map(std::path::PathBuf::from).unwrap_or_else(|| places::default_dir(custom.as_deref()));
+    blocking(move || places::make(&parent, &name).map(|p| p.display().to_string())).await?
+}
+
+/// 系统的「选择文件夹」窗口；取消了返回空。
+#[tauri::command]
+async fn px_pick_folder(app: AppHandle, start: Option<String>) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    blocking(move || {
+        let mut dialog = app.dialog().file();
+        if let Some(dir) = start.filter(|d| std::path::Path::new(d).is_dir()) {
+            dialog = dialog.set_directory(dir);
+        }
+        dialog
+            .blocking_pick_folder()
+            .and_then(|picked| picked.into_path().ok())
+            .map(|path| path.display().to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn px_forget_folder(app: AppHandle, path: String) -> Result<Option<(usize, places::Recent)>, String> {
+    let removed = blocking(move || places::forget(&path)).await??;
+    publish(&app);
+    Ok(removed)
+}
+
+#[tauri::command]
+async fn px_restore_folder(app: AppHandle, index: usize, recent: places::Recent) -> Result<(), String> {
+    blocking(move || places::restore(index, recent)).await??;
+    publish(&app);
+    Ok(())
+}
+
+// ---------- AI 工具箱 ----------
+
+#[derive(Serialize)]
+struct Toolbox {
+    skills: Vec<toolbox::Skill>,
+    /// 技能能启用到的 Agent（装着的、有技能目录的）。
+    skill_agents: Vec<AgentId>,
+    mcps: Vec<upstream::Mcp>,
+    /// MCP 能启用到的 Agent（装着的）。
+    mcp_agents: Vec<AgentId>,
+    /// 这次从各 Agent 里新读进来的 MCP 个数。
+    imported: usize,
+}
+
+#[tauri::command]
+async fn px_toolbox(runtime: State<'_, Runtime>) -> Result<Toolbox, String> {
+    let core = runtime.core()?;
+    let installed: Vec<AgentId> = core.snapshot().agents.iter().filter(|a| a.install.usable()).map(|a| a.id).collect();
+    let _guard = core.op.lock().await;
+    let worker = core.clone();
+    blocking(move || {
+        let engine = worker.engine();
+        let imported = engine.mcp_import().unwrap_or_else(|e| {
+            log::warn!("[PONTEX] 读入各 Agent 的 MCP 有失败: {e}");
+            0
+        });
+        let skill_agents: Vec<AgentId> = toolbox::AGENTS.into_iter().filter(|a| installed.contains(a)).collect();
+        Ok(Toolbox {
+            skills: toolbox::list(&skill_agents),
+            skill_agents,
+            mcps: engine.mcp_list()?,
+            mcp_agents: installed,
+            imported,
+        })
+    })
+    .await?
+}
+
+#[tauri::command]
+async fn px_skill_toggle(dir: String, agent: AgentId, enabled: bool) -> Result<(), String> {
+    blocking(move || toolbox::toggle(&dir, agent, enabled)).await?
+}
+
+#[tauri::command]
+async fn px_mcp_toggle(runtime: State<'_, Runtime>, id: String, agent: AgentId, enabled: bool) -> Result<(), String> {
+    let core = runtime.core()?;
+    let _guard = core.op.lock().await;
+    let worker = core.clone();
+    blocking(move || worker.engine().mcp_toggle(&id, agent, enabled)).await?
+}
+
+#[tauri::command]
+async fn px_mcp_save(
+    runtime: State<'_, Runtime>,
+    id: Option<String>,
+    name: String,
+    server: serde_json::Value,
+    on: Vec<AgentId>,
+) -> Result<String, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("MCP_NAME_EMPTY".into());
+    }
+    let core = runtime.core()?;
+    let _guard = core.op.lock().await;
+    let worker = core.clone();
+    blocking(move || worker.engine().mcp_save(id, &name, server, &on)).await?
+}
+
+#[tauri::command]
+async fn px_mcp_delete(runtime: State<'_, Runtime>, id: String) -> Result<(), String> {
+    let core = runtime.core()?;
+    let _guard = core.op.lock().await;
+    let worker = core.clone();
+    blocking(move || worker.engine().mcp_delete(&id)).await?
+}
+
+/// 试着连一下：`ok` 能用、`login` 要先登录、`failed` 连不上。
+#[tauri::command]
+async fn px_mcp_check(runtime: State<'_, Runtime>, ids: Vec<String>) -> Result<Vec<(String, &'static str)>, String> {
+    let core = runtime.core()?;
+    let worker = core.clone();
+    let servers = blocking(move || {
+        ids.into_iter()
+            .filter_map(|id| worker.engine().mcp_server(&id).map(|server| (id, server)))
+            .collect::<Vec<_>>()
+    })
+    .await?;
+    Ok(upstream::mcp_check(servers).await)
 }
 
 #[tauri::command]
@@ -731,6 +902,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(
             tauri_plugin_window_state::StateFlags::POSITION | tauri_plugin_window_state::StateFlags::SIZE,
         ).build())
@@ -831,6 +1003,18 @@ pub fn run() {
             px_install_cancel,
             px_install_state,
             px_uninstall,
+            px_folders,
+            px_launch,
+            px_new_folder,
+            px_pick_folder,
+            px_forget_folder,
+            px_restore_folder,
+            px_toolbox,
+            px_skill_toggle,
+            px_mcp_toggle,
+            px_mcp_save,
+            px_mcp_delete,
+            px_mcp_check,
         ])
         .build(tauri::generate_context!())
         .expect("PonteX One failed to start")

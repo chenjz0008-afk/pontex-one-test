@@ -1,30 +1,57 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { api, type Outcome, type Prefs, type SkillOwned, type Snapshot } from "./api";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { api, type Folders, type KeyReport, type Outcome, type Prefs, type Snapshot } from "./api";
 import { list, outcomeText, reason, type T } from "./i18n";
-import { Button, Dialog, Notice } from "./ui";
+import { isWindows } from "./Launch";
+import { Button, Dialog, Notice, useToast } from "./ui";
 
-export function Settings({ snapshot, t, focus, onConnect }: { snapshot: Snapshot; t: T; focus?: "skills"; onConnect: () => void }) {
+export function Settings({ snapshot, t, onConnect }: { snapshot: Snapshot; t: T; onConnect: () => void }) {
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<{ bad: boolean; text: string } | null>(null);
   useEffect(() => {
     void api.autostart(null).then(setAutostart).catch(() => setAutostart(null));
   }, []);
+  const [folders, setFolders] = useState<Folders | null>(null);
   useEffect(() => {
-    if (focus) document.getElementById(`px-${focus}`)?.scrollIntoView({ block: "center" });
-  }, [focus]);
+    void api.folders().then(setFolders).catch(() => setFolders(null));
+  }, [snapshot.prefs.folders_dir]);
   const save = (change: Partial<Prefs>) => void api.setPrefs({ ...snapshot.prefs, ...change });
 
   return (
     <section>
-      <h1>{t.settings}</h1>
+      <h1 className="sr-only">{t.settings}</h1>
       {message && <Notice tone={message.bad ? "bad" : "info"}>{message.text}</Notice>}
-      <Group title={t.keySection}>
+      <Group title="PonteX">
         {snapshot.connected ? (
-          <Rotate snapshot={snapshot} t={t} onMessage={setMessage} />
+          <KeyRow snapshot={snapshot} t={t} />
         ) : (
           <Item label={t.notConnectedTitle}>
             <Button kind="primary" onClick={onConnect}>{t.connect}</Button>
+          </Item>
+        )}
+      </Group>
+      <Group title={t.foldersSection}>
+        <Item label={t.foldersDefault} hint={t.foldersDefaultHint(isWindows ? "OneDrive" : "iCloud")} path={folders?.default_dir}>
+          <Button
+            onClick={() =>
+              void api.pickFolder(folders?.default_dir ?? null).then((dir) => dir && save({ folders_dir: dir }))
+            }
+          >
+            {t.change}
+          </Button>
+        </Item>
+        <Item label={t.openFolderToo} hint={t.openFolderTooHint(t.finder(isWindows))} htmlFor="px-open-folder">
+          <input id="px-open-folder" type="checkbox" role="switch" checked={snapshot.prefs.open_folder} onChange={(e) => save({ open_folder: e.target.checked })} />
+        </Item>
+        {folders && folders.terminals.length > 1 && (
+          <Item label={t.terminal} hint={t.terminalHint} htmlFor="px-terminal">
+            <select
+              id="px-terminal"
+              value={snapshot.prefs.terminal && folders.terminals.includes(snapshot.prefs.terminal) ? snapshot.prefs.terminal : folders.terminals[0]}
+              onChange={(e) => save({ terminal: e.target.value === folders.terminals[0] ? null : e.target.value })}
+            >
+              {folders.terminals.map((id) => <option key={id} value={id}>{t.terminals[id] ?? id}</option>)}
+            </select>
           </Item>
         )}
       </Group>
@@ -55,7 +82,6 @@ export function Settings({ snapshot, t, focus, onConnect }: { snapshot: Snapshot
           <input id="px-tray" type="checkbox" role="switch" checked={snapshot.prefs.close_to_tray} onChange={(e) => save({ close_to_tray: e.target.checked })} />
         </Item>
       </Group>
-      <Skills t={t} onMessage={setMessage} />
       <Group title={t.helpSection}>
         <Item label={t.docs}><Button onClick={() => void api.open("docs")}>docs.ponte-x.com</Button></Item>
         <Item label={t.diagnose} hint={t.diagnoseHint}>
@@ -89,11 +115,12 @@ function Group({ title, id, children }: { title: string; id?: string; children: 
   );
 }
 
-function Item({ label, hint, htmlFor, children }: { label: string; hint?: string; htmlFor?: string; children: ReactNode }) {
+function Item({ label, hint, path, htmlFor, children }: { label: string; hint?: string; path?: string; htmlFor?: string; children: ReactNode }) {
   return (
     <div className="item">
       <div>
         {htmlFor ? <label htmlFor={htmlFor}>{label}</label> : <span>{label}</span>}
+        {path && <small className="path">{path}</small>}
         {hint && <small>{hint}</small>}
       </div>
       {children}
@@ -101,90 +128,105 @@ function Item({ label, hint, htmlFor, children }: { label: string; hint?: string
   );
 }
 
-/** 换 Key：只更新正在用 PonteX 的，其余不变，所以不勾选任何 Agent。 */
-function Rotate({ snapshot, t, onMessage }: { snapshot: Snapshot; t: T; onMessage: (m: { bad: boolean; text: string } | null) => void }) {
+/** Key：平时一行；点「更换」就地展开。粘贴后自动检查，有效才能保存；只更新正在用 PonteX 的 Agent。 */
+function KeyRow({ snapshot, t }: { snapshot: Snapshot; t: T }) {
+  const [editing, setEditing] = useState(false);
   const [key, setKey] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    onMessage(null);
-    try {
-      const { outcomes } = await api.connect(key, snapshot.agents.map((a) => ({ agent: a.id, apply: false })));
-      const failed = outcomes.filter((o: Outcome) => o.error);
-      const changed = outcomes
-        .filter((o) => o.result === "applied")
-        .map((o) => snapshot.agents.find((a) => a.id === o.agent)?.label ?? o.agent);
-      setKey("");
-      onMessage(
-        failed.length
-          ? { bad: true, text: failed.map((o) => `${snapshot.agents.find((a) => a.id === o.agent)?.label}: ${outcomeText(t, o)}`).join("\n") }
-          : { bad: false, text: changed.length ? t.rotatedBody(list(t, changed)) : t.rotated },
-      );
-    } catch (cause) {
-      onMessage({ bad: true, text: reason(t, String(cause)) });
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <form className="item" onSubmit={(event) => void submit(event)}>
-      <div>
-        <label htmlFor="px-rotate">{snapshot.key_hint}…</label>
-        <small>{t.rotateHint}</small>
-      </div>
-      <div className="key-row small">
-        <input id="px-rotate" type="password" autoComplete="off" spellCheck={false} placeholder="px-" value={key} onChange={(e) => setKey(e.target.value)} />
-        <Button type="submit" busy={busy} disabled={!key.trim()}>{busy ? t.verifying : t.update}</Button>
-      </div>
-    </form>
-  );
-}
+  const [check, setCheck] = useState<{ state: "checking" | "ok" | "bad"; why?: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  const seq = useRef(0);
+  const using = snapshot.agents.filter((a) => a.current === "pontex").map((a) => a.label);
 
-/** 从网站装进来的技能：装在哪、什么版本，能移除。 */
-function Skills({ t, onMessage }: { t: T; onMessage: (m: { bad: boolean; text: string } | null) => void }) {
-  const [owned, setOwned] = useState<SkillOwned[]>([]);
-  const [removing, setRemoving] = useState<SkillOwned | null>(null);
-  const [busy, setBusy] = useState(false);
-  const pull = () => api.skills().then(setOwned).catch(() => setOwned([]));
-  useEffect(() => void pull(), []);
-  async function remove(skill: SkillOwned) {
-    setBusy(true);
+  useEffect(() => {
+    const value = key.trim();
+    if (!value) return setCheck(null);
+    const mine = ++seq.current;
+    setCheck({ state: "checking" });
+    const timer = setTimeout(() => {
+      void api
+        .checkKey(value)
+        .then((report: KeyReport) => {
+          if (mine !== seq.current) return;
+          setCheck(report.usable ? { state: "ok" } : { state: "bad", why: reason(t, report.reason ?? "INVALID_API_KEY") });
+        })
+        .catch((cause) => mine === seq.current && setCheck({ state: "bad", why: reason(t, String(cause)) }));
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [key, t]);
+
+  async function save() {
+    if (check?.state !== "ok" || saving) return;
+    setSaving(true);
     try {
-      for (const place of skill.places) await api.skillRemove(skill.slug, place.agent);
-      onMessage({ bad: false, text: t.skillRemoved(skill.title) });
+      const { outcomes } = await api.connect(key.trim(), snapshot.agents.map((a) => ({ agent: a.id, apply: false })));
+      const failed = outcomes.filter((o: Outcome) => o.error);
+      if (failed.length) {
+        toast({ bad: true, text: failed.map((o) => `${snapshot.agents.find((a) => a.id === o.agent)?.label}：${outcomeText(t, o)}`).join("\n") });
+        return;
+      }
+      const changed = outcomes.filter((o) => o.result === "applied").length;
+      setEditing(false);
+      setKey("");
+      toast({ text: t.keySaved(changed), sub: t.restartAll });
     } catch (cause) {
-      onMessage({ bad: true, text: reason(t, String(cause)) });
+      setCheck({ state: "bad", why: reason(t, String(cause)) });
     } finally {
-      await pull();
-      setBusy(false);
-      setRemoving(null);
+      setSaving(false);
     }
   }
-  return (
-    <Group title={t.skillSection} id="px-skills">
-      {owned.map((skill) => (
-        <Item
-          key={skill.slug}
-          label={skill.title}
-          hint={list(t, skill.places.map((p) => t.skillPlace(p.label, p.version) + (p.modified ? ` · ${t.skillEdited}` : "")))}
-        >
-          <Button onClick={() => setRemoving(skill)}>{t.skillRemove}</Button>
-        </Item>
-      ))}
-      <Item label={owned.length ? t.skillBrowse : t.skillEmpty} hint={owned.length ? undefined : t.skillEmptyHint}>
-        <Button onClick={() => void api.open("skills")}>skills.ponte-x.com</Button>
+
+  if (!editing)
+    return (
+      <Item label="API Key" path={`${snapshot.key_hint}…`}>
+        <span className="key-side">
+          <span className="kstat"><span className="dot ok" aria-hidden />{t.keyEnabled}</span>
+          <Button onClick={() => setEditing(true)}>{t.keyChange}</Button>
+        </span>
       </Item>
-      {removing && (
-        <Dialog title={t.skillRemoveTitle(removing.title)} onClose={() => setRemoving(null)} locked={busy}>
-          <p>{t.skillRemoveConfirm(list(t, removing.places.map((p) => p.label)))}</p>
-          <div className="row end">
-            <Button kind="quiet" disabled={busy} autoFocus onClick={() => setRemoving(null)}>{t.cancel}</Button>
-            <Button kind="danger" busy={busy} onClick={() => void remove(removing)}>{t.skillRemove}</Button>
-          </div>
-        </Dialog>
-      )}
-    </Group>
+    );
+
+  const line =
+    check?.state === "checking" ? (
+      <><span className="spinner" aria-hidden />{t.checking}</>
+    ) : check?.state === "ok" ? (
+      <><span className="kok">{t.keyValid}</span>{"　"}{t.keyWillApply(list(t, using))}</>
+    ) : check?.state === "bad" ? (
+      <span className="kbad">{check.why}</span>
+    ) : (
+      <>{t.keyPaste}{"　"}<button type="button" className="linkish" onClick={() => void api.open("key")}>{t.keyGet} ↗</button></>
+    );
+  return (
+    <div className="item key-edit">
+      <label htmlFor="px-key">{t.keyChangeTitle}</label>
+      <input
+        id="px-key"
+        className={check?.state === "bad" ? "kin bad" : check?.state === "ok" ? "kin good" : "kin"}
+        type="password"
+        autoFocus
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="px-…"
+        value={key}
+        aria-invalid={check?.state === "bad"}
+        onChange={(e) => setKey(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            void save();
+          }
+          if (e.key === "Escape") {
+            setEditing(false);
+            setKey("");
+          }
+        }}
+      />
+      <p className="kline" role="status">{line}</p>
+      <div className="kbtns">
+        <Button kind="quiet" disabled={saving} onClick={() => { setEditing(false); setKey(""); }}>{t.cancel}</Button>
+        <Button kind="primary" busy={saving} disabled={check?.state !== "ok"} onClick={() => void save()}>{t.save}</Button>
+      </div>
+    </div>
   );
 }
 

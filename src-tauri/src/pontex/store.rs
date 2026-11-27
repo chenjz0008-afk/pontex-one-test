@@ -71,6 +71,16 @@ pub struct Prefs {
     pub language: Option<String>,
     pub close_to_tray: bool,
     pub coexist_notice_seen: bool,
+    /// 新建的文件夹默认放在哪；没设就是个人文件夹里的 PonteX。
+    pub folders_dir: Option<String>,
+    /// 在文件夹里打开 Agent 时，先在访达 / 资源管理器里打开这个文件夹。
+    pub open_folder: bool,
+    /// 用哪个终端（`places::terminals()` 里的一个）；没设就用系统自带的。
+    pub terminal: Option<String>,
+    /// 第一次在文件夹里打开 Agent 之后不再显示说明。
+    pub launched_once: bool,
+    /// 看过「已读入各 Agent 里现有的 MCP」。
+    pub toolbox_notice_seen: bool,
 }
 
 impl Default for Prefs {
@@ -79,6 +89,11 @@ impl Default for Prefs {
             language: None,
             close_to_tray: true,
             coexist_notice_seen: false,
+            folders_dir: None,
+            open_folder: true,
+            terminal: None,
+            launched_once: false,
+            toolbox_notice_seen: false,
         }
     }
 }
