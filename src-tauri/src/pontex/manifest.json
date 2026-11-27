@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "sequence": 1,
+  "agents": {
+    "claude-code": {
+      "protocol": "messages",
+      "roles": {
+        "main": { "prefer": ["anthropic/claude-opus-5.5"], "family": ["anthropic/claude-opus-", "anthropic/claude-sonnet-"] },
+        "opus": { "prefer": ["anthropic/claude-opus-5.5"], "family": ["anthropic/claude-opus-"], "fallback": "main" },
+        "sonnet": { "prefer": ["anthropic/claude-sonnet-5.5", "anthropic/claude-sonnet-5"], "family": ["anthropic/claude-sonnet-"], "fallback": "main" },
+        "haiku": { "prefer": ["anthropic/claude-haiku-5.5", "anthropic/claude-haiku-4.5"], "family": ["anthropic/claude-haiku-"], "fallback": "sonnet" },
+        "subagent": { "prefer": ["anthropic/claude-haiku-5.5", "anthropic/claude-haiku-4.5"], "family": ["anthropic/claude-haiku-"], "fallback": "sonnet" }
+      }
+    },
+    "codex": {
+      "protocol": "responses",
+      "roles": { "main": { "prefer": ["openai/gpt-6-luna"], "family": ["openai/gpt-"] } }
+    },
+    "gemini-cli": {
+      "protocol": "gemini",
+      "roles": { "main": { "prefer": ["google/gemini-3.5-pro", "google/gemini-3.5-flash", "google/gemini-3.5-flash-lite"], "family": ["google/gemini-"] } }
+    },
+    "grok-build": {
+      "protocol": "responses",
+      "roles": { "main": { "prefer": [], "family": ["x-ai/grok-", "xai/grok-"] } }
+    },
+    "workbuddy": {
+      "protocol": "chat",
+      "roles": {
+        "main": { "prefer": ["openai/gpt-6-luna"], "family": ["openai/gpt-", "anthropic/claude-"] },
+        "extra1": { "prefer": ["anthropic/claude-opus-5.5"], "family": ["anthropic/claude-opus-"], "optional": true },
+        "extra2": { "prefer": ["anthropic/claude-sonnet-5.5", "anthropic/claude-sonnet-5"], "family": ["anthropic/claude-sonnet-"], "optional": true },
+        "extra3": { "prefer": ["google/gemini-3.5-pro", "google/gemini-3.5-flash"], "family": ["google/gemini-"], "optional": true }
+      }
+    }
+  }
+}

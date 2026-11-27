@@ -1,0 +1,58 @@
+name: PonteX One checks
+# 平时推送只在 Linux 上测（分钟数按 1 倍算）；合进 pontex/main 之前的合并请求、或手动触发，
+# 再加上 macOS 和 Windows（分别按 10 倍、2 倍算）。
+on:
+  pull_request:
+    branches: [pontex/main]
+  push:
+    branches: [pontex/main, "pontex/**", "sync/**"]
+  workflow_dispatch:
+concurrency:
+  group: pontex-ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  boundary:
+    name: Upstream boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - run: node tools/pontex.mjs check
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.12.3 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with: { components: "rustfmt,clippy" }
+      - name: Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev \
+            libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: src-tauri, shared-key: pontex-test }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm exec vite build --config vite.pontex.config.ts
+      # 上游的 generate_context! 和我们的都要求前端目录存在
+      - name: Placeholder for the upstream bundle
+        shell: bash
+        run: touch dist/index.html dist/tray-panel.html
+      - name: PonteX tests
+        run: "cargo test --manifest-path src-tauri/Cargo.toml --lib pontex:: -- --test-threads=1"
+      - name: Isolation test (real directory name)
+        run: cargo test --manifest-path src-tauri/Cargo.toml --test pontex_isolation

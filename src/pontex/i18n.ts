@@ -1,0 +1,569 @@
+import type { Agent, Outcome, Place, Status } from "./api";
+
+const zh = {
+  settings: "设置",
+  back: "返回",
+  done: "完成",
+  cancel: "取消",
+  close: "关闭",
+  retry: "重试",
+  checking: "正在检查…",
+  // 连接
+  connectTitle: "输入 PonteX Key",
+  connectLead: "验证后，为这台电脑上的 Agent 接入 PonteX。",
+  keyLabel: "API Key",
+  keyHelp: "还没有 Key？查看创建方法",
+  next: "下一步",
+  verifying: "正在验证…",
+  keyStored: "Key 只发往 api.ponte-x.com，并写进所选 Agent 的本机配置，以便关闭本软件后继续使用。",
+  planTitle: "选择要接入的 Agent",
+  planLead: "可以随时切回原来的配置。",
+  planNow: "现在：",
+  planNowNative: "原生",
+  planNowPontex: "已是 PonteX",
+  planNowOther: (name: string) => `${name} → PonteX，可随时切回`,
+  planNowOtherKept: (name: string) => name,
+  planNowMissing: "未安装，装好后自动接入",
+  planNowBroken: "配置文件有语法错误，不会改动",
+  planNowWb: "添加 PonteX 模型，不改其他模型",
+  planVerifyNote: "接入后会用每个 Agent 的主模型各发一次最小请求来确认可用，产生极少量用量。",
+  apply: "接入",
+  applying: "正在接入…",
+  resultTitle: "接入结果",
+  changeKey: "换一把 Key",
+  quotaNotice: "这把 Key 有效，但现在没有可用额度。可以先配置，额度恢复后再验证。",
+  rotatedNotice: (at: string) => `这是轮换前的旧 Key，将于 ${at} 失效。`,
+  // 首页
+  homeTitle: "我的 Agent",
+  newSession: "切换后，新打开的会话生效。",
+  notConnectedTitle: "还没有连接 PonteX",
+  connect: "连接 PonteX",
+  native: "原生",
+  other: "其他",
+  model: "主模型",
+  recheck: "重新检测",
+  version: "版本",
+  location: "配置文件",
+  lastVerify: "上次验证",
+  verifyOk: "成功",
+  requestId: "请求编号",
+  envNotes: "环境变量",
+  envBlocking: "会挡住 PonteX 配置，请从所在文件中移除",
+  envHarmless: "不影响 PonteX，切回原生后可能生效",
+  verifyNow: "验证",
+  restoreOne: "还原",
+  restoreTitle: (name: string) => `还原 ${name}`,
+  restoreConfirm: (name: string) => `删除 ${name} 里所有 PonteX 相关配置，回到接入前的样子。会话记录不受影响。`,
+  brokenHint: (path: string) => `${path} 运行不了。可以用下面这行命令从镜像重装，装好后会自动接入 PonteX。`,
+  mirrorCommand: "镜像安装命令",
+  copy: "复制",
+  copied: "已复制",
+  dismiss: "关闭",
+  officialOffline: "Google 已于 2026-06-18 停止为个人账号提供 Gemini CLI 服务，原生需要付费 Key 或企业授权。",
+  lockedSessions: (n: number) => `Codex 会把切换前的 ${n} 个会话设为只读，切回去后恢复。`,
+  coexist: "检测到 CC Switch。两个软件管理同一份 Agent 配置，以最后一次操作为准。",
+  gotIt: "知道了",
+  // 设置
+  keySection: "PonteX Key",
+  generalSection: "通用",
+  language: "语言",
+  languageAuto: "跟随系统",
+  autostart: "开机自动启动",
+  closeToTray: "关闭窗口后留在菜单栏 / 托盘",
+  helpSection: "帮助",
+  diagnose: "导出诊断信息",
+  diagnoseHint: "不含 Key 和令牌，保存后会在文件夹中显示。",
+  diagnosed: (path: string) => `诊断信息已保存到 ${path}`,
+  openData: "打开数据目录",
+  docs: "帮助文档",
+  aboutSection: "关于",
+  about: (v: string, e: string) => `PonteX One ${v} · 基于 CC Switch ${e}`,
+  license: "CC Switch 以 MIT 许可证发布，版权归其作者所有。",
+  disconnectSection: "断开",
+  disconnect: "断开并还原",
+  disconnectHint: "所有 Agent 回到接入前的配置，并从本机删除 Key。卸载软件前请先断开。",
+  disconnectConfirm: "断开后，五个 Agent 都会回到接入前的配置，Key 会从这台电脑上删除。",
+  disconnecting: "正在还原…",
+  rotateHint: "只更新正在使用 PonteX 的 Agent，其余不变。",
+  update: "更新 Key",
+  rotated: "Key 已更新",
+  rotatedBody: (names: string) => `Key 已更新，${names} 已换成新 Key。新打开的会话生效。`,
+  // 技能
+  skillTitle: "安装技能",
+  skillLoading: "正在获取技能信息…",
+  skillFetching: (v: string) => `来自 PonteX Skills · 版本 ${v}，正在下载并校验…`,
+  skillSection: "技能",
+  skillEmpty: "还没有安装技能",
+  skillEmptyHint: "在 PonteX Skills 网站上点「安装」，会回到这里确认。",
+  skillBrowse: "浏览技能",
+  skillManage: "管理已装技能",
+  skillUsage: "新开一个会话后生效。可以在「设置 → 技能」里查看和移除。",
+  skillPlace: (label: string, v: string) => `${label} · 版本 ${v}`,
+  skillEdited: "你改过",
+  skillRemoveTitle: (title: string) => `移除「${title}」`,
+  skillRemoveConfirm: (agents: string) => `从 ${agents} 里移除这个技能。你改过的内容会先备份到数据目录。`,
+  skillRemoved: (title: string) => `已移除「${title}」`,
+  skillFrom: (v: string, n: number) => `来自 PonteX Skills · 版本 ${v} · ${n} 个文件`,
+  skillScripts: (n: number) => `包含 ${n} 个脚本文件，由 Agent 在你同意后运行`,
+  skillUnverified: "该技能尚未在此 Agent 上验证",
+  skillNotInstalled: "未安装",
+  skillInstall: (n: number) => `安装到 ${n} 个 Agent`,
+  skillPick: "请选择 Agent",
+  skillDone: "安装完成",
+  skillDoneBody: (title: string, v: string) => `「${title}」（版本 ${v}）已安装到：`,
+  skillFailed: "有 Agent 没有装上",
+  skillBackup: "你改过的旧版本已备份到数据目录。",
+  skillRemove: "移除",
+  installing: "正在安装…",
+  upgrade: (v: string) => `更新到 ${v}`,
+  installAll: (n: number) => `安装全部（${n}）`,
+  install: "安装",
+  officialSite: "官网安装链接",
+  installTitle: (names: string) => `安装 ${names}`,
+  installPreparing: "正在查询最新版本…",
+  installFrom: "命令行版。优先从国内镜像下载官方发行包，验证官方签名后安装。",
+  planFailed: "暂时查不到版本，这次先跳过",
+  planOffline: "现在连不上下载源，请稍后再试。",
+  planMirror: "也可以复制下面的命令，在终端里从镜像安装。装好后自动接入 PonteX。",
+  installSize: (mb: string) => `约占 ${mb}`,
+  installWhere: "安装位置",
+  installPathReady: "终端里可以直接使用",
+  installPathProfile: (file: string) => `会在 ${file} 末尾加一段，让新终端找得到命令`,
+  installPathUser: "会加入当前用户的 Path",
+  installSafe: "不需要管理员权限，不改动已有的安装；已装的同名命令始终优先。",
+  installNode: "Gemini CLI 需要 Node，会附带一份只给它用的。",
+  installThen: "装好后自动接入 PonteX。",
+  installStart: "开始安装",
+  installed: (names: string, commands: string) => `${names} 装好了。新开一个终端，输入 ${commands} 就能用。`,
+  downloadingNode: "正在下载 Node",
+  downloadingRuntime: "正在下载微软 VC++ 运行库",
+  retryIn: (s: number) => `下载源暂时不可用，${s} 秒后自动重试`,
+  appChoice: "Codex 装哪个版本",
+  appOption: "桌面版",
+  appRecommended: "推荐",
+  appDesc: (v: string, size: string) => `ChatGPT 桌面应用里的 Codex · ${v} · ${size}`,
+  cliOption: "命令行",
+  cliDesc: (v: string, size: string) => `在终端里使用 · ${v} · 约占 ${size}`,
+  appShared: "两个版本读同一份配置，装哪个都会自动接入 PonteX。",
+  appWhere: (dir: string) => `装到「应用程序」：${dir}`,
+  appWhereWindows: "装成 Windows 应用（开始菜单里叫 ChatGPT）",
+  appSafe: "官方源和镜像并行下载，核对 OpenAI 的官方签名后才安装；之后由它自己更新。",
+  appAdmin: "安装时 Windows 会请您确认一次：Codex 自带一个后台安全服务，系统规定装服务要管理员同意。",
+  appFailed: "桌面版暂时查不到，可以先装命令行版",
+  appDone: "Codex 桌面版装好了，已接入 PonteX。",
+  openApp: "打开 Codex",
+  installApp: "安装桌面版",
+  phases: {
+    queued: "排在后面，前一个装完自动开始",
+    resolving: "正在查询版本",
+    downloading: "正在下载",
+    verifying: "正在核对官方签名",
+    authorizing: "请在 Windows 弹出的确认框里点「是」",
+    unpacking: "正在解包",
+    testing: "正在试运行",
+    activating: "正在启用",
+  },
+  managed: "由 PonteX One 安装",
+  uninstall: "移除",
+  uninstallTitle: (name: string) => `移除 ${name}`,
+  uninstallConfirm: (name: string) => `移除 PonteX One 安装的 ${name}？会先把它的配置还原到接入前，会话记录保留。`,
+  fatalTitle: "PonteX One 没能启动",
+  fatalSafe: "各个 Agent 里已经写好的配置不受影响，照常可以使用。",
+  fatalRetry: "重试",
+  fatalDetail: "技术信息",
+  fatal: {
+    DB_TOO_NEW: "本机数据由更新的版本创建，请下载最新版后再打开。数据没有被改动。",
+    DB_LOCKED: "本机数据正被另一个程序占用。请关掉其他 PonteX One 窗口后重试。",
+    DB_CORRUPT: "本机数据文件损坏，读不出来。请导出诊断信息发给我们，不要删除数据目录。",
+    DB_FULL: "磁盘空间不足，本机数据写不进去。请腾出一些空间后重试。",
+    DB_ACCESS: "本机数据文件打不开，可能是没有权限，或者磁盘空间不足。",
+    STARTUP: "启动时遇到了问题。请重试，还不行就导出诊断信息发给我们。",
+  } as Record<string, string>,
+  download: "下载最新版",
+};
+
+type Dict = typeof zh;
+
+const en: Dict = {
+  settings: "Settings",
+  back: "Back",
+  done: "Done",
+  cancel: "Cancel",
+  close: "Close",
+  retry: "Retry",
+  checking: "Checking…",
+  connectTitle: "Enter your PonteX key",
+  connectLead: "Once verified, the agents on this computer can use PonteX.",
+  keyLabel: "API key",
+  keyHelp: "No key yet? See how to create one",
+  next: "Next",
+  verifying: "Verifying…",
+  keyStored: "Your key is sent only to api.ponte-x.com and saved in the local config of the agents you choose, so they keep working after this app closes.",
+  planTitle: "Choose agents to connect",
+  planLead: "You can go back to your previous setup at any time.",
+  planNow: "Now: ",
+  planNowNative: "Native",
+  planNowPontex: "Already PonteX",
+  planNowOther: (name) => `${name} → PonteX, switch back any time`,
+  planNowOtherKept: (name) => name,
+  planNowMissing: "Not installed, connects once installed",
+  planNowBroken: "Config file has a syntax error and won't be touched",
+  planNowWb: "Adds PonteX models, keeps the rest",
+  planVerifyNote: "After connecting, one minimal request per agent confirms its main model works. This uses a tiny amount of credit.",
+  apply: "Connect",
+  applying: "Connecting…",
+  resultTitle: "Result",
+  changeKey: "Use another key",
+  quotaNotice: "This key is valid but has no credit right now. You can set things up and verify later.",
+  rotatedNotice: (at) => `This is the pre-rotation key and expires at ${at}.`,
+  homeTitle: "My agents",
+  newSession: "Changes apply to newly opened sessions.",
+  notConnectedTitle: "PonteX is not connected",
+  connect: "Connect PonteX",
+  native: "Native",
+  other: "Other",
+  model: "Main model",
+  recheck: "Check again",
+  version: "Version",
+  location: "Config file",
+  lastVerify: "Last verified",
+  verifyOk: "OK",
+  requestId: "Request ID",
+  envNotes: "Environment variables",
+  envBlocking: "Overrides the PonteX config; remove it from this file",
+  envHarmless: "Doesn't affect PonteX, may apply in native mode",
+  verifyNow: "Verify",
+  restoreOne: "Restore",
+  restoreTitle: (name) => `Restore ${name}`,
+  restoreConfirm: (name) => `Removes every PonteX setting from ${name} and returns it to how it was before connecting. Sessions stay.`,
+  brokenHint: (path) => `${path} won't run. Reinstall it from a mirror with the command below; it connects to PonteX once installed.`,
+  mirrorCommand: "Mirror install command",
+  copy: "Copy",
+  copied: "Copied",
+  dismiss: "Dismiss",
+  officialOffline: "Google ended Gemini CLI for personal accounts on 2026-06-18. Native needs a paid key or an enterprise licence.",
+  lockedSessions: (n) => `Codex makes ${n} earlier session(s) read-only until you switch back.`,
+  coexist: "CC Switch found. Both apps manage the same agent config; the last action wins.",
+  gotIt: "Got it",
+  keySection: "PonteX key",
+  generalSection: "General",
+  language: "Language",
+  languageAuto: "System",
+  autostart: "Start at login",
+  closeToTray: "Keep running in the menu bar / tray when closed",
+  helpSection: "Help",
+  diagnose: "Export diagnostics",
+  diagnoseHint: "Contains no keys or tokens. Shown in its folder once saved.",
+  diagnosed: (path) => `Diagnostics saved to ${path}`,
+  openData: "Open data folder",
+  docs: "Documentation",
+  aboutSection: "About",
+  about: (v, e) => `PonteX One ${v} · built on CC Switch ${e}`,
+  license: "CC Switch is released under the MIT licence; copyright belongs to its authors.",
+  disconnectSection: "Disconnect",
+  disconnect: "Disconnect and restore",
+  disconnectHint: "Every agent returns to its earlier setup and the key is removed. Do this before uninstalling.",
+  disconnectConfirm: "All five agents return to the setup they had before connecting, and the key is removed from this computer.",
+  disconnecting: "Restoring…",
+  rotateHint: "Only agents using PonteX are updated.",
+  update: "Update key",
+  rotated: "Key updated",
+  rotatedBody: (names) => `Key updated for ${names}. Applies to newly opened sessions.`,
+  skillTitle: "Install skill",
+  skillLoading: "Looking up the skill…",
+  skillFetching: (v) => `From PonteX Skills · version ${v}, downloading and verifying…`,
+  skillSection: "Skills",
+  skillEmpty: "No skills installed yet",
+  skillEmptyHint: "Choose Install on the PonteX Skills website to confirm it here.",
+  skillBrowse: "Browse skills",
+  skillManage: "Manage skills",
+  skillUsage: "Open a new session to use it. View or remove it in Settings → Skills.",
+  skillPlace: (label, v) => `${label} · version ${v}`,
+  skillEdited: "edited by you",
+  skillRemoveTitle: (title) => `Remove “${title}”`,
+  skillRemoveConfirm: (agents) => `Removes this skill from ${agents}. Anything you edited is backed up to the data folder first.`,
+  skillRemoved: (title) => `Removed “${title}”`,
+  skillFrom: (v, n) => `From PonteX Skills · version ${v} · ${n} files`,
+  skillScripts: (n) => `Includes ${n} script file(s), run by the agent with your approval`,
+  skillUnverified: "Not verified on this agent",
+  skillNotInstalled: "Not installed",
+  skillInstall: (n) => `Install to ${n} agent${n === 1 ? "" : "s"}`,
+  skillPick: "Choose an agent",
+  skillDone: "Installed",
+  skillDoneBody: (title, v) => `“${title}” (version ${v}) was installed to:`,
+  skillFailed: "Some agents failed",
+  skillBackup: "Your edited version was backed up to the data folder.",
+  skillRemove: "Remove",
+  installing: "Installing…",
+  upgrade: (v) => `Update to ${v}`,
+  installAll: (n) => `Install all (${n})`,
+  install: "Install",
+  officialSite: "Official site",
+  installTitle: (names) => `Install ${names}`,
+  installPreparing: "Looking up the latest version…",
+  installFrom: "Command-line version. The official release, downloaded from a mirror first and installed after its signature is verified.",
+  planFailed: "Version lookup failed, skipped this time",
+  planOffline: "No download source is reachable right now. Try again later.",
+  planMirror: "Or copy this command to install from a mirror in your terminal. It connects to PonteX once installed.",
+  installSize: (mb) => `About ${mb}`,
+  installWhere: "Location",
+  installPathReady: "Already available in your terminal",
+  installPathProfile: (file) => `Adds a block to the end of ${file} so new terminals can find it`,
+  installPathUser: "Adds it to your user Path",
+  installSafe: "No admin rights. Existing installs are untouched and always take precedence.",
+  installNode: "Gemini CLI needs Node; a private copy is included.",
+  installThen: "Connects to PonteX once installed.",
+  installStart: "Install",
+  installed: (names, commands) => `${names} installed. Open a new terminal and run ${commands}.`,
+  downloadingNode: "Downloading Node",
+  downloadingRuntime: "Downloading the Microsoft VC++ runtime",
+  retryIn: (s) => `Download sources are unavailable. Retrying in ${s}s`,
+  appChoice: "Which Codex",
+  appOption: "Desktop app",
+  appRecommended: "Recommended",
+  appDesc: (v, size) => `Codex in the ChatGPT desktop app · ${v} · ${size}`,
+  cliOption: "Command line",
+  cliDesc: (v, size) => `Use it in a terminal · ${v} · about ${size}`,
+  appShared: "Both read the same config, so either one connects to PonteX.",
+  appWhere: (dir) => `Installs to Applications: ${dir}`,
+  appWhereWindows: "Installs as a Windows app (ChatGPT in the Start menu)",
+  appSafe: "Downloaded from the official source and mirrors in parallel; installed only after OpenAI's signature checks out. It updates itself afterwards.",
+  appAdmin: "Windows will ask you to confirm once: Codex includes a background security service, and installing a service needs admin approval.",
+  appFailed: "The desktop app can't be looked up right now. You can install the command line first.",
+  appDone: "The Codex desktop app is installed and connected to PonteX.",
+  openApp: "Open Codex",
+  installApp: "Install the desktop app",
+  phases: {
+    queued: "Next in line, starts by itself",
+    resolving: "Looking up version",
+    downloading: "Downloading",
+    verifying: "Checking the official signature",
+    authorizing: "Click Yes in the Windows prompt",
+    unpacking: "Unpacking",
+    testing: "Trying it out",
+    activating: "Enabling",
+  },
+  managed: "Installed by PonteX One",
+  uninstall: "Remove",
+  uninstallTitle: (name) => `Remove ${name}`,
+  uninstallConfirm: (name) => `Remove the ${name} installed by PonteX One? Its config is restored first; sessions stay.`,
+  fatalTitle: "PonteX One couldn't start",
+  fatalSafe: "Your agents keep working with the config they already have.",
+  fatalRetry: "Try again",
+  fatalDetail: "Technical details",
+  fatal: {
+    DB_TOO_NEW: "This data was created by a newer version. Download the latest PonteX One to open it. Nothing was changed.",
+    DB_LOCKED: "Another program is using the local data. Close other PonteX One windows and try again.",
+    DB_CORRUPT: "The local data file is damaged. Export diagnostics and send them to us; don't delete the data folder.",
+    DB_FULL: "The disk is full, so local data can't be written. Free some space and try again.",
+    DB_ACCESS: "The local data file can't be opened. It may lack permission, or the disk is full.",
+    STARTUP: "Something went wrong while starting. Try again, or export diagnostics and send them to us.",
+  },
+  download: "Download latest",
+};
+
+export type T = Dict & { lang: "zh" | "en" };
+
+export function pickLanguage(pref: string | null | undefined): T {
+  const lang = pref ?? navigator.language;
+  return lang.toLowerCase().startsWith("zh")
+    ? { ...zh, lang: "zh" }
+    : { ...en, lang: "en" };
+}
+
+/** 原因码 → 一句话。没有收录的原样给出，方便反馈。 */
+const REASONS: Record<string, [string, string]> = {
+  KEY_FORMAT: ["请输入 px- 开头的 API Key。", "Enter an API key that starts with px-."],
+  PROVISIONING_KEY_NOT_FOR_INFERENCE: ["这是管理密钥（pxp-），请改用 px- 开头的 API Key。", "This is a provisioning key (pxp-). Use an API key that starts with px-."],
+  API_KEY_REQUIRED: ["请输入 Key。", "Enter a key."],
+  INVALID_API_KEY: ["Key 不正确，或轮换后的旧 Key 已过宽限期。", "The key is wrong, or it was rotated and has expired."],
+  API_KEY_REVOKED: ["这把 Key 已被吊销。", "This key has been revoked."],
+  API_KEY_EXPIRED: ["这把 Key 已过期。", "This key has expired."],
+  IP_NOT_ALLOWED: ["当前网络不在这把 Key 的 IP 白名单里。", "This network isn't on the key's IP allowlist."],
+  ORG_SUSPENDED: ["企业已被停用，请联系 PonteX。", "Your organisation is suspended. Contact PonteX."],
+  INSUFFICIENT_BALANCE: ["企业余额不足，请充值后重试。", "Your organisation is out of credit."],
+  WALLET_FROZEN: ["企业钱包已冻结，请联系 PonteX。", "Your organisation's wallet is frozen. Contact PonteX."],
+  MEMBER_QUOTA_EXCEEDED: ["成员额度已用完，请联系管理员。", "The member quota is used up. Ask your admin."],
+  PERIOD_LIMIT_EXCEEDED: ["这把 Key 本周期额度已用完。", "This key's quota for the period is used up."],
+  MODEL_NOT_FOUND: ["模型不存在或未上架。", "The model doesn't exist."],
+  MODEL_NOT_ALLOWED: ["这把 Key 不能使用这个模型。", "This key can't use this model."],
+  MODEL_NOT_AVAILABLE: ["这个模型现在不能从这个 Agent 的协议调用。", "This model isn't available over this agent's protocol."],
+  FIELD_UNSUPPORTED: ["网关不支持请求里的某个字段。", "The gateway rejected a field in the request."],
+  NO_MODELS: ["这把 Key 没有可用的模型。", "This key has no usable models."],
+  NETWORK: ["连不上 PonteX，请检查网络或代理。", "Can't reach PonteX. Check your network or proxy."],
+  TIMEOUT: ["PonteX 响应超时，请稍后重试。", "PonteX timed out. Try again."],
+  BAD_RESPONSE: ["返回内容无法识别，网络可能被代理拦截。", "Unexpected response; a proxy may be interfering."],
+  NOT_INSTALLED: ["这个 Agent 还没有安装。", "This agent isn't installed."],
+  NOT_CONNECTED: ["请先连接 PonteX。", "Connect PonteX first."],
+  NOT_EFFECTIVE: ["写入后没有生效，可能同时有其他程序在修改配置。", "The change didn't take effect; another program may be editing the config."],
+  NO_PREVIOUS: ["没有可以恢复的原配置。", "There is no previous setup to restore."],
+  WORKBUDDY_MODELS_TAKEN: ["WorkBuddy 里已有同名模型，没有可以添加的。", "WorkBuddy already has models with these names."],
+  INSTALL_OFFLINE: ["所有下载源都连不上，请检查网络或代理。已下载的部分会保留，重试时接着下。", "No download source is reachable. What was downloaded is kept for the next try."],
+  INSTALL_MISSING: ["各个源都还没有这个版本，请稍后再试。", "No source has this version yet. Try again later."],
+  INSTALL_UNTRUSTED: ["没有取到通过官方签名验证的版本，没有安装。", "No version passed signature verification. Nothing was installed."],
+  INSTALL_CHECKSUM: ["下载内容和官方签名对不上，没有安装。", "The download doesn't match its official signature. Nothing was installed."],
+  INSTALL_DISK: ["磁盘空间不足，或数据目录不可写。", "Not enough disk space, or the data folder isn't writable."],
+  INSTALL_ARCHIVE: ["安装包内容不符合预期，没有安装。", "The package isn't what was expected. Nothing was installed."],
+  INSTALL_RUN: ["下载正确，但在这台电脑上运行不了，没有启用。", "Downloaded correctly but it won't run on this computer. Not enabled."],
+  INSTALL_CANCELLED: ["已取消。已下载的部分会保留，重试时接着下。", "Cancelled. What was downloaded is kept for the next try."],
+  INSTALL_UNSUPPORTED: ["这台电脑的系统暂不支持自动安装。", "Automatic install isn't supported on this system."],
+  INSTALL_BUSY: ["正在安装，装完再移除。", "Still installing. Remove it after that finishes."],
+  INSTALL_CONFLICT: ["几个下载源给出的同一版本对不上，为安全起见没有安装，请稍后再试。", "Sources disagree about the same version. Nothing was installed for safety; try again later."],
+  INSTALL_OLD_OS: ["这台电脑的系统版本太旧，装不了 Codex 桌面版（macOS 需 13 以上，Windows 需 10 的 2004 版以上），可以改装命令行版。", "This system is too old for the Codex desktop app (macOS 13+ or Windows 10 2004+). The command line works."],
+  INSTALL_APP_TAKEN: ["「应用程序」里已经有一个叫 ChatGPT 的其他应用，为免覆盖没有安装。请先把它移走或改名。", "Another app named ChatGPT is already in Applications. It wasn't overwritten; move or rename it first."],
+  INSTALL_DENIED: ["Windows 的确认框里没有点「是」，没有安装。已下载的内容会保留。", "The Windows prompt wasn't approved, so nothing was installed."],
+  INSTALL_DEPENDENCY: ["这台电脑缺少它需要的系统组件，没有启用。请导出诊断信息发给我们。", "This computer is missing a system component it needs. Not enabled; please send us a diagnostic report."],
+  INSTALL_EXISTS: ["不是由 PonteX One 安装的，没有改动。", "Not installed by PonteX One. Nothing was changed."],
+  SKILL_NOT_FOUND: ["没有找到这个技能。", "Skill not found."],
+  SKILL_BAD_LINK: ["安装链接不正确。", "The install link is invalid."],
+  SKILL_BAD_MANIFEST: ["技能清单不正确，没有安装。", "The skill manifest is invalid. Nothing was installed."],
+  SKILL_BAD_ZIP: ["技能包含有不安全的内容，没有安装。", "The package contains unsafe entries. Nothing was installed."],
+  SKILL_CHECKSUM: ["技能包校验不通过，没有安装。", "The package failed verification. Nothing was installed."],
+  SKILL_TOO_LARGE: ["技能包过大，没有安装。", "The package is too large. Nothing was installed."],
+  SKILL_SITE_ERROR: ["PonteX Skills 暂时无法访问。", "PonteX Skills is unavailable."],
+  SKILL_LINKED: ["这个位置由其他工具管理，没有改动。", "Another tool manages this location. Nothing was changed."],
+  SKILL_NOT_READY: ["请重新从网站打开安装链接。", "Open the install link from the website again."],
+  SKILL_NOT_OURS: ["不是由 PonteX One 安装的，没有改动。", "Not installed by PonteX One. Nothing was changed."],
+};
+
+export function reason(t: T, code: string | null | undefined): string {
+  if (!code) return "";
+  if (code.startsWith("UNREADABLE:")) {
+    const file = code.slice("UNREADABLE:".length);
+    return t.lang === "zh"
+      ? `配置文件有语法错误，没有改动：${file}`
+      : `The config file has a syntax error and was left alone: ${file}`;
+  }
+  const known = REASONS[code];
+  if (known) return known[t.lang === "zh" ? 0 : 1];
+  const http = /^HTTP_(\d+)$/.exec(code);
+  if (http) return t.lang === "zh" ? `请求失败（${http[1]}）` : `Request failed (${http[1]})`;
+  return code;
+}
+
+export function statusText(t: T, agent: Agent): string {
+  const { code, detail } = agent.status as Status;
+  const z = t.lang === "zh";
+  switch (code) {
+    case "checking":
+      return t.checking;
+    case "not-installed":
+      return z ? "未安装" : "Not installed";
+    case "waiting":
+      return z ? "未安装 · 装好后自动接入" : "Not installed · connects once installed";
+    case "broken":
+      return z ? "已安装，但无法运行" : "Installed, but won't run";
+    case "unreadable":
+      return z ? "配置文件有语法错误，未改动" : "Config file has a syntax error, left alone";
+    case "failed":
+      return reason(t, detail);
+    case "overridden":
+      return z ? `被环境变量 ${detail} 覆盖` : `Overridden by ${detail}`;
+    case "drifted":
+      return z ? "已被其他程序改回原生" : "Changed back to native by another program";
+    case "other-key":
+      return z ? `使用另一把 PonteX Key（${detail ?? ""}…）` : `Using another PonteX key (${detail ?? ""}…)`;
+    case "other":
+      return z ? `正在使用 ${detail}` : `Using ${detail}`;
+    case "verified":
+      return z ? "使用 PonteX · 已验证" : "Using PonteX · verified";
+    case "written":
+      return z ? "使用 PonteX · 已写入，未验证" : "Using PonteX · written, not verified";
+    case "verify-failed":
+      return `${z ? "使用 PonteX · " : "Using PonteX · "}${reason(t, detail)}`;
+    case "native":
+      return detail ? `${z ? "使用原生" : "Using native"} · ${detail}` : z ? "使用原生" : "Using native";
+    case "added":
+      return z ? "PonteX 模型已添加 · 在 WorkBuddy 里选用" : "PonteX models added · select them in WorkBuddy";
+    case "not-added":
+      return z ? "未添加 PonteX 模型" : "PonteX models not added";
+  }
+}
+
+export function actionText(t: T, agent: Agent): string {
+  const z = t.lang === "zh";
+  switch (agent.status.action) {
+    case "install":
+      if (agent.id === "workbuddy") return t.officialSite;
+      return agent.mirror ? t.mirrorCommand : "";
+    case "verify":
+      return z ? "验证" : "Verify";
+    case "apply":
+      if (agent.status.code === "drifted" || agent.status.code === "other-key")
+        return z ? "重新接入" : "Connect again";
+      if (agent.status.code === "failed") return t.retry;
+      return z ? "接入" : "Connect";
+    case "open-app":
+      return z ? "打开 WorkBuddy" : "Open WorkBuddy";
+    case "show-detail":
+      return z ? "查看" : "View";
+    default:
+      return "";
+  }
+}
+
+/** 按软件里选的语言显示时间，不跟系统走。 */
+export function timeText(t: T, at: number | string): string {
+  const date = new Date(typeof at === "number" ? at * 1000 : at);
+  return date.toLocaleString(t.lang === "zh" ? "zh-CN" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
+}
+
+export const list = (t: T, names: string[]) => names.join(t.lang === "zh" ? "、" : ", ");
+
+export type Tone = "ok" | "idle" | "warn" | "bad";
+
+export function tone(agent: Agent): Tone {
+  switch (agent.status.code) {
+    case "verified":
+      return "ok";
+    case "unreadable":
+    case "failed":
+    case "verify-failed":
+    case "broken":
+      return "bad";
+    case "overridden":
+    case "drifted":
+    case "other-key":
+      return "warn";
+    default:
+      return "idle";
+  }
+}
+
+export function outcomeText(t: T, outcome: Outcome): string {
+  const z = t.lang === "zh";
+  switch (outcome.result) {
+    case "applied":
+      return z ? "已接入" : "Connected";
+    case "restored":
+      return z ? "已还原" : "Restored";
+    case "staged":
+      return z ? "未改动" : "Left as is";
+    case "waiting":
+      return z ? "装好后自动接入" : "Connects once installed";
+    case "no-model":
+      return z ? "这把 Key 没有可用的模型，未改动" : "This key has no usable model; left as is";
+    default:
+      return reason(t, outcome.error);
+  }
+}
+
+export function placeText(t: T, place: Place, dir: string): string {
+  const z = t.lang === "zh";
+  switch (place.kind) {
+    case "up-to-date":
+      return z ? "已是最新" : "Up to date";
+    case "update":
+      return z ? `从 ${place.from} 更新` : `Update from ${place.from}`;
+    case "modified":
+      return z ? "你改过这个技能，会先备份" : "You edited this skill; it will be backed up";
+    case "renamed":
+      return z
+        ? `已有同名技能，会装为 ${dir.split(/[\\/]/).pop()}`
+        : `Name is taken; installs as ${dir.split(/[\\/]/).pop()}`;
+    case "linked":
+      return z ? "由其他工具管理，不改动" : "Managed by another tool, left alone";
+    default:
+      return "";
+  }
+}

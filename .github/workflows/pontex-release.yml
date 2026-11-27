@@ -1,0 +1,38 @@
+name: PonteX One packages
+# 只产出安装包，不自动发布：发布用 tools/publish.mjs，人工确认后执行。
+#   pontex-v*      三个平台
+#   pontex-win-v*  只打 Windows
+on:
+  workflow_dispatch:
+  push:
+    tags: ["pontex-v*", "pontex-win-v*"]
+permissions:
+  contents: read
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - run: node tools/pontex.mjs check
+      - name: Tag matches product version
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(node -p "require('./src-tauri/pontex/tauri.pontex.json').version")
+          case "$GITHUB_REF_NAME" in "pontex-v$version"|"pontex-win-v$version"|"pontex-win-v$version-"*) ;; *) exit 1;; esac
+  macos:
+    needs: tag
+    if: ${{ !startsWith(github.ref_name, 'pontex-win-v') }}
+    uses: ./.github/workflows/pontex-package.yml
+    permissions: { contents: write }
+    with: { os: macos-latest, target: universal-apple-darwin, bundles: "app,dmg", find: "dmg/*.dmg", asset: macOS-universal.dmg }
+  windows-x64:
+    needs: tag
+    uses: ./.github/workflows/pontex-package.yml
+    permissions: { contents: write }
+    with: { os: windows-2022, target: x86_64-pc-windows-msvc, bundles: msi, find: "msi/*zh-CN.msi", asset: Windows-x64.msi }
+  windows-arm64:
+    needs: tag
+    uses: ./.github/workflows/pontex-package.yml
+    permissions: { contents: write }
+    with: { os: windows-11-arm, target: aarch64-pc-windows-msvc, bundles: msi, find: "msi/*zh-CN.msi", asset: Windows-arm64.msi }

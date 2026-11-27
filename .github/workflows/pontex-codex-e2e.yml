@@ -1,0 +1,127 @@
+name: PonteX Codex desktop e2e
+# 在真机上走一遍 Codex 桌面版的安装：真下载（多源并行）、真校验、真装进系统，
+# 再让它自带的 codex 按 PonteX 的配置发一次请求。
+# Windows 上先卸掉 VC++ 运行库、模拟一台新电脑；再建一个普通账户，走「另一个管理员确认」那条路。
+#   推 pontex-e2e-* 标签或手动触发（改了安装相关代码、发版前跑）；日志在每台机器的 e2e-<系统> 产物里。
+#   省分钟数：按普通测试编译（不走发布优化），和日常检查共用编译缓存；macOS 一台 Apple 芯片、一台 Intel。
+on:
+  push:
+    tags: ["pontex-e2e-*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, name: macOS-15-arm64 }
+          - { os: macos-15-intel, name: macOS-15-x64 }
+          - { os: windows-2022, name: Windows-x64, target: x86_64-pc-windows-msvc }
+          - { os: windows-11-arm, name: Windows-arm64, target: aarch64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      # 测试程序本身也把运行库编进去：卸掉系统的 VC++ 运行库之后它还得能跑
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
+      CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@v6
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.12.3 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - name: LLVM for Windows ARM64
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          $bin = 'C:\Program Files\LLVM\bin'
+          "LIBCLANG_PATH=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CLANG_PATH=$(Join-Path $bin 'clang.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: src-tauri, shared-key: pontex-test }
+      - name: Frontend placeholder
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec vite build --config vite.pontex.config.ts
+          touch dist/index.html dist/tray-panel.html
+      - name: Build tests
+        run: |
+          set -o pipefail
+          mkdir -p out
+          # 编译日志留着：失败时能看到原因。--lib 只会产出一个测试程序
+          cargo test --manifest-path src-tauri/Cargo.toml --lib --no-run --message-format=json 2> >(tee out/build.log >&2) \
+            | jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null) | .executable' | tail -1 > out/test-exe.txt
+          test -s out/test-exe.txt || { echo "找不到测试程序"; exit 1; }
+          cat out/test-exe.txt
+      - name: Check the test program itself needs no VC++ runtime
+        if: runner.os == 'Windows'
+        run: node tools/pontex.mjs deps "$(cat out/test-exe.txt)"
+      - name: Simulate a clean Windows (remove the VC++ runtime)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $roots = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          $found = Get-ChildItem $roots -ErrorAction SilentlyContinue | Get-ItemProperty |
+            Where-Object { $_.DisplayName -match 'Visual C\+\+ 20(15|22).*Redistributable' -and $_.BundleCachePath }
+          foreach ($r in $found) {
+            "uninstall $($r.DisplayName)"
+            Start-Process -FilePath $r.BundleCachePath -ArgumentList '/uninstall', '/quiet', '/norestart' -Wait
+          }
+          # 别的软件也可能往系统目录里放了一份：改名藏起来，确保真的「没有」
+          foreach ($dll in 'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll') {
+            $p = Join-Path $env:SystemRoot "System32\$dll"
+            if (Test-Path $p) {
+              takeown /f $p | Out-Null; icacls $p /grant "*S-1-5-32-544:F" | Out-Null
+              Rename-Item $p "$dll.pontex-hidden"
+            }
+            "$dll present: $(Test-Path $p)"
+          }
+      - name: Install the desktop app and talk to a fake PonteX
+        run: |
+          exe="$(cat out/test-exe.txt)"
+          "$exe" pontex::installer::e2e:: --ignored --nocapture --test-threads=1 --skip another_admin --skip standard_account 2>&1 | tee out/e2e.log
+      - name: Another admin account approves (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Get-Content out/test-exe.txt
+          # 先把刚才装给 runner 账户的那份移掉，再换一个普通账户来
+          Get-AppxPackage -Name OpenAI.Codex | Remove-AppxPackage
+          # net user 遇到超过 14 位的密码会停下来问 Y/N，非交互时直接放弃建账户：凑满 14 位
+          $password = 'Px' + (-join ((48..57) + (65..90) + (97..122) | Get-Random -Count 9 | ForEach-Object { [char]$_ })) + 'a1!'
+          net user pxuser $password /add | Out-Null
+          if ($LASTEXITCODE) { throw 'could not create pxuser' }
+          $sid = (New-Object Security.Principal.NTAccount('pxuser')).Translate([Security.Principal.SecurityIdentifier]).Value
+          $m = Invoke-RestMethod https://github.com/Wangnov/codex-app-mirror/releases/latest/download/release-manifest.json
+          $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+          $file = "$($m.sources.windows.architectures.$arch.packageMoniker).Msix"
+          curl.exe -fL --retry 5 -sS -o "$env:RUNNER_TEMP\$file" "https://github.com/Wangnov/codex-app-mirror/releases/download/codex-app-$($m.codexVersion)/$file"
+          $env:PX_MSIX = "$env:RUNNER_TEMP\$file"; $env:PX_OTHER_SID = $sid
+          & $exe pontex::installer::e2e::another_admin --ignored --nocapture --exact 2>&1 | Tee-Object -Append out/e2e.log
+          if ($LASTEXITCODE) { throw 'provisioning failed' }
+          # 以普通账户的身份：自己注册、核对
+          $cred = New-Object System.Management.Automation.PSCredential('pxuser', (ConvertTo-SecureString $password -AsPlainText -Force))
+          $dir = Split-Path $exe
+          icacls $dir /grant 'pxuser:(OI)(CI)RX' | Out-Null
+          $p = Start-Process -FilePath $exe -Credential $cred -LoadUserProfile -Wait -PassThru -WorkingDirectory $dir `
+            -ArgumentList 'pontex::installer::e2e::the_standard_account_registers_it_for_itself', '--ignored', '--exact', '--nocapture' `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\std.log" -RedirectStandardError "$env:RUNNER_TEMP\std.err"
+          Get-Content "$env:RUNNER_TEMP\std.log", "$env:RUNNER_TEMP\std.err" | Tee-Object -Append out/e2e.log
+          "standard account exit $($p.ExitCode)" | Tee-Object -Append out/e2e.log
+          if ($p.ExitCode) { throw 'standard account could not register' }
+      - name: Keep the log
+        if: always()
+        run: mkdir -p out && echo "${{ job.status }} ${{ github.sha }}" > out/RESULT
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-${{ matrix.name }}
+          path: out/*

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- 覆盖上游 Info.plist：只注册自己的协议，不抢 ccswitch -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.ponte-x.one</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>pontex-one</string>
+      </array>
+    </dict>
+  </array>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>PonteX One 不使用本地网络。</string>
+</dict>
+</plist>

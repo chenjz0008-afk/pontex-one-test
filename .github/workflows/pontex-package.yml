@@ -1,0 +1,90 @@
+name: PonteX One package
+# 打一个平台的包，把成品（失败时是日志）放进 pontex-artifacts/<资产名> 分支，供 tools/fetch-artifacts.mjs 取回。
+# 编译任务只有读权限；只有不跑任何项目代码的交付任务能写。
+on:
+  workflow_call:
+    inputs:
+      os: { type: string, required: true }
+      target: { type: string, required: true }
+      bundles: { type: string, required: true }
+      find: { type: string, required: true }
+      asset: { type: string, required: true }
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.12.3 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - name: Rust targets
+        run: |
+          if [ "${{ runner.os }}" = macOS ]; then rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          else rustup target add ${{ inputs.target }}; fi
+      # ARM64 的 rquickjs 要用 libclang 生成绑定，ring 要用 clang 汇编。
+      - name: LLVM for Windows ARM64
+        if: inputs.target == 'aarch64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bin = 'C:\Program Files\LLVM\bin'
+          if (-not (Test-Path $bin)) { throw "LLVM not found at $bin" }
+          "LIBCLANG_PATH=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CLANG_PATH=$(Join-Path $bin 'clang.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: src-tauri, key: "${{ inputs.target }}", cache-on-failure: true }
+      - name: Build
+        run: |
+          set -o pipefail
+          mkdir -p out
+          version=$(node -p "require('./src-tauri/pontex/tauri.pontex.json').version")
+          {
+            pnpm install --frozen-lockfile &&
+            node tools/pontex.mjs build --target ${{ inputs.target }} --bundles ${{ inputs.bundles }} &&
+            cp src-tauri/target/${{ inputs.target }}/release/bundle/${{ inputs.find }} "out/PonteX-One-$version-${{ inputs.asset }}"
+          } 2>&1 | tee build.log
+      - name: Keep the end of the log
+        if: always()
+        run: |
+          mkdir -p out
+          { echo "commit ${{ github.sha }}"; echo "job ${{ job.status }}"; tail -c 120000 build.log 2>/dev/null || echo "没有走到 Build"; } > "out/${{ inputs.asset }}.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ inputs.asset }}
+          path: out/*
+  deliver:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: "${{ inputs.asset }}", path: out }
+      - name: Push to its own branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET: ${{ inputs.asset }}
+          RESULT: ${{ needs.build.result }}
+        run: |
+          mkdir -p out && cd out
+          echo "$RESULT $GITHUB_SHA run $GITHUB_RUN_ID" > RESULT
+          git init -q -b deliver
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "$ASSET $RESULT $GITHUB_SHA"
+          git -c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            push -q -f "https://github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/pontex-artifacts/${ASSET%.*}"

@@ -1,0 +1,134 @@
+name: PonteX One smoke
+# 在真机上装一遍、打开、截图、卸载。没有 Key，不联网关。
+#   推 pontex-smoke-* 标签触发；结果放进 pontex-artifacts/smoke-<系统>。
+on:
+  push:
+    tags: ["pontex-smoke-*"]
+permissions:
+  contents: read
+jobs:
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2022, name: Windows-x64 }
+          - { os: windows-11-arm, name: Windows-arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: "pontex-artifacts/${{ matrix.name }}", persist-credentials: false }
+      # 新装的 Windows 上没有 VC++ 运行库：先卸掉，确认 PonteX One 照样能打开
+      - name: Simulate a clean Windows (remove the VC++ runtime)
+        shell: pwsh
+        run: |
+          $roots = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          Get-ChildItem $roots -ErrorAction SilentlyContinue | Get-ItemProperty |
+            Where-Object { $_.DisplayName -match 'Visual C\+\+ 20(15|22).*Redistributable' -and $_.BundleCachePath } |
+            ForEach-Object { Start-Process -FilePath $_.BundleCachePath -ArgumentList '/uninstall', '/quiet', '/norestart' -Wait }
+          foreach ($dll in 'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll') {
+            $p = Join-Path $env:SystemRoot "System32\$dll"
+            if (Test-Path $p) { takeown /f $p | Out-Null; icacls $p /grant "*S-1-5-32-544:F" | Out-Null; Rename-Item $p "$dll.pontex-hidden" }
+          }
+      - name: Install, open, uninstall
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          foreach ($dll in 'vcruntime140.dll', 'vcruntime140_1.dll') { "$dll in System32: $(Test-Path (Join-Path $env:SystemRoot "System32\$dll"))" | Tee-Object -FilePath out/report.txt -Append }
+          $log = 'out/report.txt'
+          function Say($text) { $text | Tee-Object -FilePath $log -Append }
+          function Shot($name) {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("$PWD/out/$name.png"); $g.Dispose(); $bmp.Dispose()
+          }
+          $msi = Get-ChildItem *.msi | Select-Object -First 1
+          if (-not $msi) { Say 'NO MSI'; exit 1 }
+          Say "msi $($msi.Name) $((Get-FileHash $msi).Hash)"
+          $p = Start-Process msiexec -ArgumentList "/i `"$($msi.FullName)`" /qn /norestart /l*v out\install.log" -Wait -PassThru
+          Say "install exit $($p.ExitCode)"
+          $dir = "$env:LOCALAPPDATA\Programs\PonteX One"
+          Say "files: $((Get-ChildItem $dir -ErrorAction SilentlyContinue).Name -join ', ')"
+          $link = (Get-ItemProperty 'HKCU:\Software\Classes\pontex-one\shell\open\command' -ErrorAction SilentlyContinue).'(default)'
+          Say "deep link: $link"
+          Say "start menu: $(Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\PonteX One\PonteX One.lnk")"
+          $exe = "$dir\pontex-one.exe"
+          $app = Start-Process $exe -PassThru
+          Start-Sleep 25
+          Say "alive: $(-not $app.HasExited)  title: $((Get-Process -Id $app.Id -ErrorAction SilentlyContinue).MainWindowTitle)"
+          Shot 'window'
+          Say "run key: $((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).'PonteX One')"
+          Say '--- data dir'; Say ((Get-ChildItem "$HOME\.pontex-one" -ErrorAction SilentlyContinue).Name -join ', ')
+          Say '--- log'; Say (Get-Content "$HOME\.pontex-one\logs\pontex-one.log" -ErrorAction SilentlyContinue | Out-String)
+          Start-Process 'pontex-one://skill/install?slug=brandkit' -ErrorAction SilentlyContinue
+          Start-Sleep 15
+          Shot 'link'
+          Say "instances: $((Get-Process pontex-one -ErrorAction SilentlyContinue).Count)"
+          Say '--- log after link'; Say (Get-Content "$HOME\.pontex-one\logs\pontex-one.log" -Tail 5 -ErrorAction SilentlyContinue | Out-String)
+          Get-Process pontex-one -ErrorAction SilentlyContinue | Stop-Process -Force
+          $p = Start-Process msiexec -ArgumentList "/x `"$($msi.FullName)`" /qn /norestart" -Wait -PassThru
+          Say "uninstall exit $($p.ExitCode)  left: $(Test-Path $exe)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "smoke-${{ matrix.name }}", path: out/* }
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, name: macOS-arm64 }
+          - { os: macos-26, name: macOS-26-arm64 }
+          - { os: macos-15-intel, name: macOS-x64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - name: Install, open
+        run: |
+          mkdir -p out; log=out/report.txt; say() { echo "$@" | tee -a $log; }
+          say "$(sw_vers -productVersion) $(uname -m)"
+          url=$(curl -fsSL https://docs.ponte-x.com/downloads/one/latest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["assets"]["macos"]["url"])')
+          curl -fsSL -o a.dmg "https://docs.ponte-x.com$url"; say "$url $(shasum -a 256 a.dmg)"
+          hdiutil attach -nobrowse -quiet -mountpoint /tmp/px a.dmg; say "dmg: $(ls -a /tmp/px | tr '\n' ' ')"
+          cp -R "/tmp/px/PonteX One.app" /Applications/; hdiutil detach -quiet /tmp/px
+          codesign --verify --deep --strict "/Applications/PonteX One.app" && say "codesign ok"
+          open "/Applications/PonteX One.app"; sleep 25
+          say "alive: $(pgrep -x pontex-one | wc -l)"; ps -axo rss,etime,comm | grep pontex-one | grep -v grep | tee -a $log
+          screencapture -x out/window.png || say "no screenshot"
+          say "--- launch agent"; cat "$HOME/Library/LaunchAgents/PonteX One.plist" 2>&1 | tee -a $log; echo >> $log
+          say "--- data dir"; ls -la ~/.pontex-one | tee -a $log
+          say "--- log"; cat ~/.pontex-one/logs/pontex-one.log 2>&1 | tee -a $log
+          open "pontex-one://skill/install?slug=brandkit"; sleep 15; screencapture -x out/link.png || true
+          say "instances: $(pgrep -x pontex-one | wc -l)"
+          say "--- log after link"; tail -5 ~/.pontex-one/logs/pontex-one.log | tee -a $log
+          pkill -x pontex-one; sleep 2
+          say "--- launch agent run"; launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/PonteX One.plist" 2>&1 | tee -a $log; sleep 8; say "started by launchd: $(pgrep -x pontex-one | wc -l)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "smoke-${{ matrix.name }}", path: out/* }
+  deliver:
+    needs: [windows, macos]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { path: out }
+      - name: Push to its own branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out && cd out
+          echo "$GITHUB_REF_NAME run $GITHUB_RUN_ID" > RESULT
+          git init -q -b deliver
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "smoke $GITHUB_REF_NAME"
+          git -c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            push -q -f "https://github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/pontex-artifacts/smoke"

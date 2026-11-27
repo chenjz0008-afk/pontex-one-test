@@ -1,0 +1,96 @@
+{
+  "productName": "PonteX One",
+  "mainBinaryName": "pontex-one",
+  "version": "0.10.0",
+  "identifier": "com.ponte-x.one",
+  "build": {
+    "frontendDist": "../dist/pontex",
+    "devUrl": "http://localhost:3310",
+    "beforeDevCommand": "pnpm exec vite --config vite.pontex.config.ts",
+    "beforeBuildCommand": "pnpm exec vite build --config vite.pontex.config.ts"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "PonteX One 经纬即连",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 16,
+          "y": 20
+        },
+        "width": 860,
+        "height": 640,
+        "minWidth": 720,
+        "minHeight": 560,
+        "visible": false,
+        "resizable": true,
+        "decorations": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src 'none'",
+      "capabilities": [
+        "pontex-one"
+      ]
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "publisher": "PonteX",
+    "copyright": "PonteX. Built on CC Switch (MIT).",
+    "category": "DeveloperTool",
+    "shortDescription": "一把钥匙，畅用主流 Agent",
+    "icon": [
+      "pontex/icons/32x32.png",
+      "pontex/icons/128x128.png",
+      "pontex/icons/128x128@2x.png",
+      "pontex/icons/icon.icns",
+      "pontex/icons/icon.ico"
+    ],
+    "resources": {
+      "../LICENSE": "LICENSE-CC-Switch.txt"
+    },
+    "windows": {
+      "wix": {
+        "template": "../release/per-user-main.wxs",
+        "upgradeCode": "7c0b1b1e-6f0a-4c55-9d0e-3a3f2f1d6b90",
+        "language": [
+          "zh-CN",
+          "en-US"
+        ]
+      }
+    },
+    "macOS": {
+      "infoPlist": "pontex/Info.plist",
+      "dmg": {
+        "background": "pontex/icons/dmg.tiff",
+        "windowSize": {
+          "width": 660,
+          "height": 420
+        },
+        "appPosition": {
+          "x": 165,
+          "y": 220
+        },
+        "applicationFolderPosition": {
+          "x": 495,
+          "y": 220
+        }
+      },
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "pontex-one"
+        ]
+      }
+    },
+    "updater": null
+  }
+}

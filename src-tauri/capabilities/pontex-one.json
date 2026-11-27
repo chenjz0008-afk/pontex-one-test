@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pontex-one",
+  "description": "PonteX One 主窗口：只要事件和拖动窗口，其余都走自己的命令",
+  "windows": ["main"],
+  "permissions": ["core:event:default", "core:window:allow-start-dragging", "core:window:allow-internal-toggle-maximize"]
+}

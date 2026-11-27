@@ -1,0 +1,18 @@
+{
+ "name": "@xai-official/grok",
+ "version": "1.0.90",
+ "dist": {
+  "integrity": "sha512-g3jv0SUL/TNzyjmqUzysRbdpwUlMoJG2KB8qtJ0Kb/9q8LljB/rWocIW+H0QGLQW06tBUWBifFx4tkGV2wB4Nw==",
+  "unpackedSize": 18242,
+  "signatures": [
+   {
+    "sig": "MEUCIQCwnk9g/VRZWjri/Inyl+hgn/6SPukWxzkwnpVBMhdJ/wIgCITraGOHs7bEfQLE7FWwigx2APzlLDiCtG8H9pnbtBY=",
+    "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+   },
+   {
+    "sig": "MEQCIQDfSSbT/ZRkPoYOca41UhayMPrH5GMg1jWiI7wGr1MuZQIfVg0FxJnd521r1ogbv9sHhIrAjx/5apNyM3GyI/5eZA==",
+    "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+   }
+  ]
+ }
+}

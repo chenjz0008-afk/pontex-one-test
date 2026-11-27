@@ -1,0 +1,25 @@
+{
+  "note": "对上游文件的全部改动。每条：find 在上游文件里恰好出现一次，换成 replace。tools/pontex.mjs 负责应用和核对；上游文件不允许有清单之外的任何改动。",
+  "hooks": [
+    { "file": "src-tauri/src/main.rs", "why": "用 PonteX One 的入口",
+      "find": "cc_switch_lib::run();", "replace": "cc_switch_lib::pontex::run();" },
+    { "file": "src-tauri/src/lib.rs", "why": "挂上 pontex 模块",
+      "find": "\nmod settings;\n", "replace": "\npub mod pontex; // PONTEX-HOOK\nmod settings;\n" },
+    { "file": "src-tauri/src/lib.rs", "why": "关掉上游入口：同一个 crate 不能有两个 generate_context!",
+      "find": "#[cfg_attr(mobile, tauri::mobile_entry_point)]\npub fn run() {", "replace": "#[cfg(any())] // PONTEX-HOOK: PonteX One 用自己的入口 src/pontex\n#[cfg_attr(mobile, tauri::mobile_entry_point)]\npub fn run() {" },
+    { "file": "src-tauri/src/lib.rs", "why": "上游入口关掉后，只被它用到的代码会报未使用", "prepend": true,
+      "find": "", "replace": "#![allow(dead_code, unused_imports, unused_macros)] // PONTEX-HOOK\n" },
+    { "file": "src-tauri/src/config.rs", "why": "设备目录的唯一来源",
+      "find": "/// 获取应用配置目录路径 (~/.cc-switch)\npub fn get_app_config_dir() -> PathBuf {", "replace": "/// PONTEX-HOOK: 设备目录的唯一来源。上游单元测试写死了 `.cc-switch`，测试构建保持原名。\npub const APP_DIR_NAME: &str = if cfg!(test) {\n    \".cc-switch\"\n} else {\n    \".pontex-one\"\n};\n\npub fn device_dir() -> PathBuf {\n    get_home_dir().join(APP_DIR_NAME)\n}\n\n/// 获取应用配置目录路径 (~/.cc-switch)\npub fn get_app_config_dir() -> PathBuf {" },
+    { "file": "src-tauri/src/config.rs", "why": "默认数据目录",
+      "find": "let default_dir = get_home_dir().join(\".cc-switch\");", "replace": "let default_dir = device_dir();" },
+    { "file": "src-tauri/src/config.rs", "why": "Windows 旧版 HOME 回退不能指到原版的数据库",
+      "find": "let legacy_dir = PathBuf::from(trimmed).join(\".cc-switch\");", "replace": "let legacy_dir = PathBuf::from(trimmed).join(APP_DIR_NAME);" },
+    { "file": "src-tauri/src/settings.rs", "why": "settings.json 的位置",
+      "find": "            crate::config::get_home_dir()\n                .join(\".cc-switch\")\n                .join(\"settings.json\"),", "replace": "            crate::config::device_dir().join(\"settings.json\")," },
+    { "file": "src-tauri/src/live/engine.rs", "why": "写前意图与首写备份的位置",
+      "find": "Self::at(crate::config::get_home_dir().join(\".cc-switch\"))", "replace": "Self::at(crate::config::device_dir())" },
+    { "file": "src-tauri/src/workbuddy_config.rs", "why": "WorkBuddy 条目归属和原版分开",
+      "find": "pub(crate) const OWNER_FIELD: &str = \"ccSwitchProviderId\";", "replace": "pub(crate) const OWNER_FIELD: &str = if cfg!(test) {\n    \"ccSwitchProviderId\"\n} else {\n    \"pontexOneProviderId\"\n};" }
+  ]
+}

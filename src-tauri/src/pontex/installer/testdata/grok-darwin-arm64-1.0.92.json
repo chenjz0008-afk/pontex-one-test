@@ -1,0 +1,18 @@
+{
+ "name": "@xai-official/grok-darwin-arm64",
+ "version": "1.0.92",
+ "dist": {
+  "integrity": "sha512-sWqlpZz9xHMOfRa66iHBDkSG6BjRrEBSqALpVaCvuQZ/s3ZeME3+1YUXi1JLfq9DY5j0po6Yi34cf9791yqygg==",
+  "unpackedSize": 53330137,
+  "signatures": [
+   {
+    "sig": "MEYCIQD6I0jQ/mWuieXq2pdnc7VmbODXGLpGSPODY4/31PDTHQIhAKqnfKzBTP/MVrSJr9r/admkY66COWwVQH8A1tLC3vrJ",
+    "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+   },
+   {
+    "sig": "MEQCIEQBEWJUDxyUq5RvinnJ4ZGoK/kXA1NNodVD6/cpDQ4QAiAflQhBCraHf3AjOBXQ8OxjHXb7OloHqDdP9pgIbt8A2w==",
+    "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+   }
+  ]
+ }
+}
