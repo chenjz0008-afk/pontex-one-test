@@ -94,7 +94,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $exe = Get-Content out/test-exe.txt
           # 先把刚才装给 runner 账户的那份移掉，再换一个普通账户来
-          Get-AppxPackage -Name OpenAI.Codex | Remove-AppxPackage
+          # Appx 模块在 PowerShell 7 里不一定能加载（Server 2022 上不行）；PonteX One 自己也一直用 Windows PowerShell
+          powershell.exe -NoProfile -Command 'Get-AppxPackage -Name OpenAI.Codex | Remove-AppxPackage'
+          if ($LASTEXITCODE) { throw 'could not remove the runner copy' }
           # net user 遇到超过 14 位的密码会停下来问 Y/N，非交互时直接放弃建账户：凑满 14 位
           $password = 'Px' + (-join ((48..57) + (65..90) + (97..122) | Get-Random -Count 9 | ForEach-Object { [char]$_ })) + 'a1!'
           net user pxuser $password /add | Out-Null
@@ -105,7 +107,7 @@ jobs:
           $file = "$($m.sources.windows.architectures.$arch.packageMoniker).Msix"
           curl.exe -fL --retry 5 -sS -o "$env:RUNNER_TEMP\$file" "https://github.com/Wangnov/codex-app-mirror/releases/download/codex-app-$($m.codexVersion)/$file"
           $env:PX_MSIX = "$env:RUNNER_TEMP\$file"; $env:PX_OTHER_SID = $sid
-          & $exe pontex::installer::e2e::another_admin --ignored --nocapture --exact 2>&1 | Tee-Object -Append out/e2e.log
+          & $exe pontex::installer::e2e::another_admin_account_provisions_for_the_machine --ignored --nocapture --exact 2>&1 | Tee-Object -Append out/e2e.log
           if ($LASTEXITCODE) { throw 'provisioning failed' }
           # 以普通账户的身份：自己注册、核对
           $cred = New-Object System.Management.Automation.PSCredential('pxuser', (ConvertTo-SecureString $password -AsPlainText -Force))
