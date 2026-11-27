@@ -100,13 +100,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
+      # 和 Windows 一样装刚打好的包（不是线上已经发布的那个）
+      - uses: actions/checkout@v6
+        with: { ref: "pontex-artifacts/macOS-universal", persist-credentials: false }
       - name: Install, open
         run: |
           mkdir -p out; log=out/report.txt; say() { echo "$@" | tee -a $log; }
           say "$(sw_vers -productVersion) $(uname -m)"
-          url=$(curl -fsSL https://docs.ponte-x.com/downloads/one/latest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["assets"]["macos"]["url"])')
-          curl -fsSL -o a.dmg "https://docs.ponte-x.com$url"; say "$url $(shasum -a 256 a.dmg)"
-          hdiutil attach -nobrowse -quiet -mountpoint /tmp/px a.dmg; say "dmg: $(ls -a /tmp/px | tr '\n' ' ')"
+          dmg=$(ls *.dmg | head -1); test -n "$dmg" || { say "NO DMG"; exit 1; }
+          say "$dmg $(shasum -a 256 "$dmg")"
+          hdiutil attach -nobrowse -quiet -mountpoint /tmp/px "$dmg"; say "dmg: $(ls -a /tmp/px | tr '\n' ' ')"
           cp -R "/tmp/px/PonteX One.app" /Applications/; hdiutil detach -quiet /tmp/px
           codesign --verify --deep --strict "/Applications/PonteX One.app" && say "codesign ok"
           open "/Applications/PonteX One.app"; sleep 25
