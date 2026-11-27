@@ -230,14 +230,29 @@ pub fn encode(script: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
+/// 系统自带的 Windows PowerShell，写全路径（PATH 里同名的程序不算数）。
+/// 不带 PSModulePath：从 PowerShell 7 里启动（或者系统里被别的软件改过）时，继承来的模块路径
+/// 会让它加载不了自带的 Get-FileHash、Get-AppxPackage 这些命令；不给它就用自己的默认值。
 #[cfg(target_os = "windows")]
-fn powershell(command: &str) -> std::io::Result<std::process::Output> {
+pub(crate) fn windows_powershell() -> std::process::Command {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| r"C:\Windows".into());
+    let mut command = std::process::Command::new(Path::new(&root).join(POWERSHELL));
+    command
+        .env_remove("PSModulePath")
+        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass"])
+        .creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+/// 相对 %SystemRoot% 的位置。
+#[cfg(target_os = "windows")]
+const POWERSHELL: &str = r"System32\WindowsPowerShell\v1.0\powershell.exe";
+
+#[cfg(target_os = "windows")]
+fn powershell(command: &str) -> std::io::Result<std::process::Output> {
+    windows_powershell().args(["-Command", command]).output()
 }
 
 #[cfg(target_os = "windows")]
@@ -261,8 +276,9 @@ pub fn elevate(redist: Option<&Path>, msix: Option<(&Path, &str)>) -> Result<(),
     let package = msix.map(|(file, sha256)| Package { file, sha256, user: &user });
     let script = elevated_script(&out, redist, package.as_ref());
     let command = format!(
-        "Start-Process -FilePath powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList \
+        "Start-Process -FilePath (Join-Path $env:SystemRoot {}) -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList \
          '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand','{}'",
+        quote(POWERSHELL),
         encode(&script)
     );
     let ran = powershell(&command).map_err(|e| e.to_string())?;

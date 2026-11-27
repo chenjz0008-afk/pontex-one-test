@@ -43,8 +43,8 @@ fn bundled_codex(scratch: &std::path::Path) -> PathBuf {
     );
     #[cfg(target_os = "windows")]
     let (root, name) = {
-        let out = std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-Command", "(Get-AppxPackage -Name OpenAI.Codex).InstallLocation"])
+        let out = super::desktop_win::windows_powershell()
+            .args(["-Command", "(Get-AppxPackage -Name OpenAI.Codex).InstallLocation"])
             .output()
             .unwrap();
         (PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()), "codex.exe")
@@ -174,8 +174,8 @@ async fn mock() -> (String, Arc<Mutex<Vec<(String, String)>>>) {
 #[ignore = "真机：先在 CI 上卸掉 VC++ 运行库再跑"]
 fn the_desktop_app_needs_nothing_that_a_clean_windows_lacks() {
     println!("系统里有 VC++ 运行库：{}", super::desktop_win::runtime_present());
-    let out = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-Command", "(Get-AppxPackage -Name OpenAI.Codex).InstallLocation"])
+    let out = super::desktop_win::windows_powershell()
+        .args(["-Command", "(Get-AppxPackage -Name OpenAI.Codex).InstallLocation"])
         .output()
         .unwrap();
     let location = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
@@ -195,8 +195,9 @@ fn another_admin_account_provisions_for_the_machine() {
     let out = msix.with_extension("result.json");
     let package = super::desktop_win::Package { file: &msix, sha256: &sha, user: &other };
     let script = super::desktop_win::elevated_script(&out, None, Some(&package));
-    let status = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand"])
+    // 和 PonteX One 一样经由 windows_powershell() 起，只是这里本来就是管理员，不用再弹确认
+    let status = super::desktop_win::windows_powershell()
+        .arg("-EncodedCommand")
         .arg(super::desktop_win::encode(&script))
         .status()
         .unwrap();
