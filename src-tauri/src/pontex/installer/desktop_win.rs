@@ -182,6 +182,8 @@ pub struct Package<'a> {
 }
 
 /// 以管理员身份执行的那段脚本：运行库（要的话）+ MSIX（要的话），一次做完。
+/// 确认的是另一个管理员账户时：先登记到这台电脑，再给那个管理员注册一次——包里带系统服务，
+/// 服务只能由管理员装上；装好以后，普通账户才能给自己注册（`confirm`），否则报 0x80073D28。
 pub fn elevated_script(out: &Path, redist: Option<(&Path, &str)>, package: Option<&Package<'_>>) -> String {
     let redist_part = match redist {
         Some((file, sha)) => format!(
@@ -202,10 +204,12 @@ pub fn elevated_script(out: &Path, redist: Option<(&Path, &str)>, package: Optio
              if ((Get-FileHash -Algorithm SHA256 -LiteralPath $m).Hash -ne {sha}) {{ throw 'INSTALL_CHECKSUM' }}\n\
              $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value\n\
              if ($me -eq {user}) {{ Add-AppxPackage -Path $m -ForceApplicationShutdown; $result.mode = 'user' }}\n\
-             else {{ Add-AppxProvisionedPackage -Online -PackagePath $m -SkipLicense | Out-Null; $result.mode = 'machine' }}\n",
+             else {{ Add-AppxProvisionedPackage -Online -PackagePath $m -SkipLicense | Out-Null\n\
+             Add-AppxPackage -RegisterByFamilyName -MainPackage {family}; $result.mode = 'machine' }}\n",
             msix = quote(&p.file.display().to_string()),
             sha = quote(p.sha256),
             user = quote(p.user),
+            family = quote(FAMILY),
         ),
         None => String::new(),
     };
@@ -441,6 +445,7 @@ mod tests {
         // MSIX：先验哈希才装；当前账户直接装，别的管理员账户先登记到电脑
         assert!(script.find("-LiteralPath $m).Hash").unwrap() < script.find("Add-AppxPackage").unwrap());
         assert!(script.contains("Add-AppxProvisionedPackage -Online"));
+        assert!(script.find("Add-AppxProvisionedPackage").unwrap() < script.find("-RegisterByFamilyName -MainPackage 'OpenAI.Codex_2p2nqsd0c76g0'").unwrap());
         // 只补运行库、只装包，各自都成立
         let only_runtime = elevated_script(Path::new("o"), Some((Path::new("VC_redist.x64.exe"), "d")), None);
         assert!(only_runtime.contains("VC_redist") && !only_runtime.contains("Add-Appx"));
