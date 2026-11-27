@@ -214,6 +214,7 @@ fn another_admin_account_provisions_for_the_machine() {
 #[test]
 #[ignore = "真机：CI 上以普通账户身份跑"]
 fn the_standard_account_registers_it_for_itself() {
+    println!("== 注册：{:?}", super::desktop_win::register());
     super::desktop_win::confirm().expect("普通账户注册或核对失败");
     assert!(desktop::installed().is_some(), "普通账户下检测不到");
 }

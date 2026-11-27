@@ -308,20 +308,11 @@ pub fn elevate(_redist: Option<&Path>, _msix: Option<(&Path, &str)>) -> Result<(
 /// 装完核对：当前账户能找到它、签名是商店签名、包里程序要的 DLL 都在。
 #[cfg(target_os = "windows")]
 pub fn confirm() -> Result<(), String> {
-    let query = format!(
-        "$p = Get-AppxPackage -Name {name} | Sort-Object Version -Descending | Select-Object -First 1\n\
-         if (-not $p) {{ Add-AppxPackage -RegisterByFamilyName -MainPackage {family} -ErrorAction SilentlyContinue; \
-         $p = Get-AppxPackage -Name {name} | Sort-Object Version -Descending | Select-Object -First 1 }}\n\
-         if ($p) {{ '{{0}}|{{1}}|{{2}}' -f $p.PackageFamilyName, $p.SignatureKind, $p.InstallLocation }}",
-        name = quote(PACKAGE_NAME),
-        family = quote(FAMILY),
-    );
-    let out = powershell(&query).map_err(|e| e.to_string())?;
-    let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let (line, error) = register()?;
     let mut parts = line.splitn(3, '|');
     let (family, kind, location) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     if family != FAMILY {
-        log::warn!("[PONTEX] 装完找不到 Codex 桌面版: {line}");
+        log::warn!("[PONTEX] 装完找不到 Codex 桌面版: {line} {error}");
         return Err(super::RUN.into());
     }
     if kind != "Store" {
@@ -334,6 +325,24 @@ pub fn confirm() -> Result<(), String> {
         return Err(DEPENDENCY.into());
     }
     Ok(())
+}
+
+/// 找当前账户的 Codex；没有就从「登记到这台电脑」的那份给自己注册一份。
+/// 返回「家族|签名类型|安装位置」和 PowerShell 报的错（没出错就是空的）。
+#[cfg(target_os = "windows")]
+pub(crate) fn register() -> Result<(String, String), String> {
+    let query = format!(
+        "$p = Get-AppxPackage -Name {name} | Sort-Object Version -Descending | Select-Object -First 1\n\
+         if (-not $p) {{ try {{ Add-AppxPackage -RegisterByFamilyName -MainPackage {family} -ErrorAction Stop }} \
+         catch {{ [Console]::Error.WriteLine($_.Exception.Message) }}\n\
+         $p = Get-AppxPackage -Name {name} | Sort-Object Version -Descending | Select-Object -First 1 }}\n\
+         if ($p) {{ '{{0}}|{{1}}|{{2}}' -f $p.PackageFamilyName, $p.SignatureKind, $p.InstallLocation }}",
+        name = quote(PACKAGE_NAME),
+        family = quote(FAMILY),
+    );
+    let out = powershell(&query).map_err(|e| e.to_string())?;
+    let text = |b: &[u8]| String::from_utf8_lossy(b).trim().to_string();
+    Ok((text(&out.stdout), text(&out.stderr)))
 }
 
 #[cfg(not(target_os = "windows"))]
