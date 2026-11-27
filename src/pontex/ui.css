@@ -95,7 +95,9 @@ nav.tabs button.on { background: var(--brand-soft); color: var(--sel-ink); }
 main { flex: 1; overflow-y: auto; padding: 0; container-type: size; }
 main > section { max-width: none; margin: 0; padding-inline: max(clamp(20px, 4.5cqi, 44px), calc((100cqi - 760px) / 2)); padding-block: clamp(18px, 4.6cqh, 44px) clamp(28px, 7cqh, 64px); }
 section { max-width: 720px; margin: 0 auto; }
-main > section.narrow { padding-inline: max(20px, calc((100cqi - 520px) / 2)); }
+main > section.narrow { max-width: none; padding-inline: max(20px, calc((100cqi - 520px) / 2)); }
+main > section.hero { padding-top: clamp(28px, 8cqh, 64px); }
+main > section.fatal { max-width: none; padding-inline: max(20px, calc((100cqi - 460px) / 2)); }
 section.narrow { max-width: 520px; }
 section.hero { padding-top: 48px; }
 .lead { color: var(--ink-2); margin-top: 6px; }
@@ -131,7 +133,7 @@ section.hero { padding-top: 48px; }
 .supported { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 20px 0 0; margin: 28px 0 0; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 13px; }
 .supported li { display: flex; align-items: center; gap: 7px; }
 .supported .agent-icon { width: 18px; height: 18px; }
-.supported .agent-icon img { width: 16px; height: 16px; }
+.supported .agent-icon img, .supported .agent-icon.app img { width: 16px; height: 16px; }
 
 .notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: clamp(12px, 2.4cqh, 18px); padding: 10px 14px; border-radius: 6px; background: var(--info-bg); border: 1px solid var(--info-line); font-size: 13px; white-space: pre-line; user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
 .notice.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
