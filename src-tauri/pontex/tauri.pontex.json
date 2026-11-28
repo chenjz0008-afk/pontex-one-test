@@ -1,7 +1,7 @@
 {
   "productName": "PonteX One",
   "mainBinaryName": "pontex-one",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "identifier": "com.ponte-x.one",
   "build": {
     "frontendDist": "../dist/pontex",
@@ -91,6 +91,14 @@
         ]
       }
     },
-    "updater": null
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk4ODM1MkVENEI2NjlFNTgKUldSWW5tWkw3VktEbUJ4VVFySHlDNm5XTkJ1MzFTWHdVazRUQUU3WWE0VDFUL3ozN1ExVGFqQVoK",
+      "endpoints": [
+        "https://docs.ponte-x.com/downloads/one/update/stable.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

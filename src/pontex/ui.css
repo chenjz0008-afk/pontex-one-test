@@ -337,3 +337,10 @@ li.drop { background: var(--brand-soft); box-shadow: inset 0 0 0 1.5px var(--bra
 .kok { color: var(--ok); font-weight: 600; }
 .kbad { color: var(--bad); }
 .kbtns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* PonteX One 自己的更新 */
+.btn.has-dot { position: relative; }
+.btn.has-dot::after { content: ""; position: absolute; top: 5px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 2px var(--surface); }
+.update-dialog .update-notes { margin: 12px 0 0; padding: 12px 14px 12px 30px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); line-height: 1.7; user-select: text; -webkit-user-select: text; }
+.update-dialog p.update-notes { padding-left: 14px; }
+.update-dialog .note { margin-top: 12px; }

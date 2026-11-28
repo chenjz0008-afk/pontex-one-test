@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, onSkill, onState, type Snapshot, type View } from "./api";
+import { api, onSkill, onState, onUpdate, type Snapshot, type View } from "./api";
 import { pickLanguage, type T } from "./i18n";
 import { Connect } from "./Connect";
 import { Home } from "./Home";
 import { Settings } from "./Settings";
 import { Toolbox } from "./Toolbox";
+import { UpdateDialog } from "./Update";
 import { SkillDialog } from "./Skill";
 import { Fatal } from "./Fatal";
-import { Brand, Button, ToastProvider } from "./ui";
+import { Brand, Button, ToastProvider, useToast } from "./ui";
 
 type Page = "home" | "toolbox" | "settings" | "connect";
 
@@ -18,6 +19,7 @@ export function App() {
   const [page, setPage] = useState<Page>("home");
   const [skill, setSkill] = useState<string | null>(null);
   const [toolboxTab, setToolboxTab] = useState<"skills" | "mcp">("skills");
+  const [showUpdate, setShowUpdate] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -25,6 +27,8 @@ export function App() {
     const subscriptions = [
       onState((next) => alive && setView(next)),
       onSkill(pull),
+      // 新版本下好了：后台已经把主窗口叫出来，这里弹「有新版本」窗口。
+      onUpdate(() => alive && setShowUpdate(true)),
     ];
     void api.snapshot().then((next) => alive && setView(next));
     pull();
@@ -71,7 +75,7 @@ export function App() {
         )}
         <div className="header-end">
           {snapshot && page !== "connect" && (
-            <button type="button" className={page === "settings" ? "btn quiet on" : "btn quiet"} aria-current={page === "settings" ? "page" : undefined} onClick={() => go(page === "settings" && !tabs ? "home" : "settings")}>
+            <button type="button" className={`btn quiet${page === "settings" ? " on" : ""}${snapshot.update.state === "ready" ? " has-dot" : ""}`} aria-current={page === "settings" ? "page" : undefined} onClick={() => go(page === "settings" && !tabs ? "home" : "settings")}>
               {t.settings}
             </button>
           )}
@@ -81,6 +85,10 @@ export function App() {
       <main>
         <Body view={view} snapshot={snapshot} t={t} page={page} setPage={go} onboarding={onboarding} toolboxTab={toolboxTab} onToolboxTab={setToolboxTab} />
       </main>
+      {snapshot && <UpdatedToast snapshot={snapshot} t={t} />}
+      {showUpdate && snapshot?.update.state === "ready" && (
+        <UpdateDialog update={snapshot.update} t={t} onClose={() => setShowUpdate(false)} />
+      )}
       {skill && snapshot && (
         <SkillDialog
           key={skill}
@@ -97,6 +105,18 @@ export function App() {
     </div>
     </ToastProvider>
   );
+}
+
+/** 更新后第一次打开：提示一句「已更新到 …」。 */
+function UpdatedToast({ snapshot, t }: { snapshot: Snapshot; t: T }) {
+  const toast = useToast();
+  const { version, prefs } = snapshot;
+  useEffect(() => {
+    if (!version || prefs.last_version === version) return;
+    if (prefs.last_version) toast({ text: t.updated(version) });
+    void api.setPrefs({ ...prefs, last_version: version });
+  }, [version, prefs, t, toast]);
+  return null;
 }
 
 function Body(props: {

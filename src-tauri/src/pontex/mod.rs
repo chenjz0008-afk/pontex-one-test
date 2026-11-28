@@ -23,6 +23,7 @@ mod store;
 mod templates;
 mod toolbox;
 mod tray;
+mod update;
 mod upstream;
 mod verify;
 

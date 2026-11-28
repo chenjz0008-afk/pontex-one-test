@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type Folders, type KeyReport, type Outcome, type Prefs, type Snapshot } from "./api";
 import { list, outcomeText, reason, type T } from "./i18n";
 import { isWindows } from "./Launch";
+import { UpdateDialog } from "./Update";
 import { Button, Dialog, Notice, useToast } from "./ui";
 
 export function Settings({ snapshot, t, onConnect }: { snapshot: Snapshot; t: T; onConnect: () => void }) {
@@ -55,6 +56,7 @@ export function Settings({ snapshot, t, onConnect }: { snapshot: Snapshot; t: T;
           </Item>
         )}
       </Group>
+      <Updates snapshot={snapshot} t={t} save={save} />
       <Group title={t.generalSection}>
         <Item label={t.language} htmlFor="px-language">
           <select id="px-language" value={snapshot.prefs.language ?? ""} onChange={(e) => save({ language: e.target.value || null })}>
@@ -227,6 +229,48 @@ function KeyRow({ snapshot, t }: { snapshot: Snapshot; t: T }) {
         <Button kind="primary" busy={saving} disabled={check?.state !== "ok"} onClick={() => void save()}>{t.save}</Button>
       </div>
     </div>
+  );
+}
+
+/** 更新：现在的版本、检查更新 / 重启更新、自动更新开关。 */
+function Updates({ snapshot, t, save }: { snapshot: Snapshot; t: T; save: (change: Partial<Prefs>) => void }) {
+  const [checking, setChecking] = useState(false);
+  const [open, setOpen] = useState(false);
+  const toast = useToast();
+  const update = snapshot.update;
+  const ready = update.state === "ready" ? update : null;
+  const hint = ready ? t.updateReady(ready.version) : update.state === "downloading" ? t.updateStatus.downloading : t.updateStatus[update.state] ?? "";
+  return (
+    <Group title={t.updateSection}>
+      {update.required && <Notice tone="warn">{t.updateRequired(update.required)}</Notice>}
+      <Item label={t.updateCurrent(snapshot.version)} hint={hint || undefined}>
+        {ready ? (
+          <span className="key-side">
+            <button type="button" className="linkish" onClick={() => setOpen(true)}>{t.updateView}</button>
+            <Button kind="primary" onClick={() => setOpen(true)}>{t.updateRestart}</Button>
+          </span>
+        ) : (
+          <Button
+            busy={checking || update.state === "checking" || update.state === "downloading"}
+            disabled={update.state === "unsupported"}
+            onClick={() => {
+              setChecking(true);
+              void api
+                .updateCheck()
+                .then((next) => next.state === "ready" && setOpen(true))
+                .catch((cause) => toast({ bad: true, text: reason(t, String(cause)) }))
+                .finally(() => setChecking(false));
+            }}
+          >
+            {t.updateCheck}
+          </Button>
+        )}
+      </Item>
+      <Item label={t.autoUpdate} hint={t.autoUpdateHint} htmlFor="px-auto-update">
+        <input id="px-auto-update" type="checkbox" role="switch" checked={snapshot.prefs.auto_update} onChange={(e) => save({ auto_update: e.target.checked })} />
+      </Item>
+      {open && ready && <UpdateDialog update={ready} t={t} onClose={() => setOpen(false)} />}
+    </Group>
   );
 }
 

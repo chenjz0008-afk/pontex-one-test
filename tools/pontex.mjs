@@ -233,6 +233,27 @@ function deps(files) {
   if (bad) die("运行库没有编进程序：新装的 Windows 上会打不开");
 }
 
+/** .app → DMG（dmgbuild，带检查）和自动更新用的 .app.tar.gz。 */
+function macPackages(args) {
+  const target = args.includes("--target") ? args[args.indexOf("--target") + 1] : null;
+  const bundle = join(ROOT, "src-tauri/target", ...(target ? [target] : []), "release/bundle");
+  const app = join(bundle, "macos/PonteX One.app");
+  if (!existsSync(app)) die(`找不到 ${app}`);
+  const version = JSON.parse(readFileSync(join(ROOT, "src-tauri/pontex/tauri.pontex.json"), "utf8")).version;
+  const arch = { "universal-apple-darwin": "universal", "aarch64-apple-darwin": "aarch64", "x86_64-apple-darwin": "x64" }[target] ?? process.arch;
+  const out = join(bundle, "dmg", `PonteX One_${version}_${arch}.dmg`);
+  const made = spawnSync("bash", [join(ROOT, "tools/dmg/build.sh"), app, out], { cwd: ROOT, stdio: "inherit" });
+  if (made.status !== 0) die("DMG 没打好");
+  // 更新包：根目录就是 PonteX One.app；不要 ._ 资源分叉文件
+  const tar = spawnSync("tar", ["-czf", `${app}.tar.gz`, "-C", join(bundle, "macos"), "PonteX One.app"], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: { ...process.env, COPYFILE_DISABLE: "1" },
+  });
+  if (tar.status !== 0) die("更新包没打好");
+  console.log(`✓ ${out}\n✓ ${app}.tar.gz`);
+}
+
 function tauri(command, args) {
   const bin = process.platform === "win32" ? "tauri.cmd" : "tauri";
   const local = join(ROOT, "node_modules/.bin", bin);
@@ -244,7 +265,20 @@ function tauri(command, args) {
   writeFileSync(join(ROOT, "release/per-user-main.wxs"), wxs.replaceAll("cc-switch.exe", "pontex-one.exe"));
   const overlay = process.platform === "win32" ? windowsOverlay() : OVERLAY;
   const bundles = { darwin: "app,dmg", win32: "msi" }[process.platform];
-  const extra = command === "build" && bundles && !args.includes("--bundles") && !args.includes("--no-bundle") ? ["--bundles", bundles] : [];
+  let extra = command === "build" && bundles && !args.includes("--bundles") && !args.includes("--no-bundle") ? ["--bundles", bundles] : [];
+  // macOS 的 DMG 不让 tauri 打：它在 CI 上会跳过写 .DS_Store，打开是没有背景、图标乱放的窗口。
+  // tauri 只出 .app，DMG 由 tools/dmg/build.sh（dmgbuild）生成并检查；同时打一份给自动更新用的 .app.tar.gz。
+  let dmg = false;
+  if (command === "build" && process.platform === "darwin") {
+    const at = args.indexOf("--bundles");
+    const list = (at >= 0 ? args[at + 1] : extra[1] ?? "").split(",").filter(Boolean);
+    if (list.includes("dmg")) {
+      dmg = true;
+      const rest = [...new Set(list.filter((b) => b !== "dmg").concat("app"))].join(",");
+      if (at >= 0) args = args.map((a, i) => (i === at + 1 ? rest : a));
+      else extra = ["--bundles", rest];
+    }
+  }
   // Windows：C 运行库静态编进 exe，新装的系统上没有 VC++ 运行库也能打开。tauri-build 自带的
   // STATIC_VCRUNTIME 在 ARM64 上替换不掉 msvcrt.lib，所以用 Rust 官方的 crt-static，两种架构都成立。
   const env = { ...process.env };
@@ -255,6 +289,7 @@ function tauri(command, args) {
     }
   }
   const result = spawnSync(local, [command, "--config", overlay, ...extra, ...args], { cwd: ROOT, stdio: "inherit", shell: process.platform === "win32", env });
+  if (result.status === 0 && dmg) macPackages(args);
   if (result.status === 0 && command === "build" && process.platform === "win32") {
     const target = args[args.indexOf("--target") + 1];
     const dir = args.includes("--target") ? join(ROOT, "src-tauri/target", target, "release") : join(ROOT, "src-tauri/target/release");

@@ -122,6 +122,10 @@ fn build(app: &AppHandle, snapshot: &Snapshot) -> tauri::Result<Menu<tauri::Wry>
         }
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
+    if let super::update::View::Ready { version, .. } = &snapshot.update.view {
+        let label = if zh { format!("重启以更新到 {version}") } else { format!("Restart to update to {version}") };
+        menu.append(&MenuItem::with_id(app, "update", label, true, None::<&str>)?)?;
+    }
     let open = if zh { format!("打开 {name}") } else { format!("Open {name}") };
     menu.append(&MenuItem::with_id(app, "open", open, true, None::<&str>)?)?;
     let quit = if zh { format!("退出 {name}") } else { format!("Quit {name}") };
@@ -134,6 +138,16 @@ fn on_menu(app: &AppHandle, id: &str) {
     match (parts.next(), parts.next()) {
         (Some("open"), _) => super::app::show_main(app),
         (Some("quit"), _) => app.exit(0),
+        (Some("update"), _) => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let runtime = app.state::<Runtime>();
+                if let Err(error) = super::app::restart_to_update(&app, &runtime).await {
+                    log::warn!("[PONTEX] 从菜单栏更新失败: {error}");
+                    super::app::show_main(&app);
+                }
+            });
+        }
         (Some("toggle"), Some(agent)) => {
             let Some(agent) = AgentId::parse(agent) else { return };
             let runtime = app.state::<Runtime>();

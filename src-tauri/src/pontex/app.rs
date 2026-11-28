@@ -17,11 +17,12 @@ use super::links::{self, Link};
 use super::skills::{self, Installed, Preview, Ready};
 use super::store::{Prefs, Target, Verify};
 use super::upstream::{self, Engine};
-use super::{autostart, diagnose, places, toolbox, tray, verify};
+use super::{autostart, diagnose, places, toolbox, tray, update, verify};
 
 const EVENT_STATE: &str = "px://state";
 const EVENT_SKILL: &str = "px://skill";
 const EVENT_INSTALL: &str = "px://install";
+const EVENT_UPDATE: &str = "px://update";
 /// 多久自己检查一次装没装、配置有没有被改。只读本机，不联网。
 const REFRESH: Duration = Duration::from_secs(600);
 /// 问一次「我们装的有没有新版」。
@@ -431,6 +432,68 @@ async fn px_restore_folder(app: AppHandle, index: usize, recent: places::Recent)
     blocking(move || places::restore(index, recent)).await??;
     publish(&app);
     Ok(())
+}
+
+// ---------- PonteX One 自己的更新 ----------
+
+/// 查一次，有就下好；下载过程中每秒广播一次进度。
+async fn self_update(app: &AppHandle, core: &Arc<Core>, manual: bool) -> update::Status {
+    let ticker = {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(800)).await;
+                publish(&app);
+            }
+        })
+    };
+    let status = update::check(app, &core.install_id(), manual).await;
+    ticker.abort();
+    // 端到端测试：下好就装，验证「装上、重开」整条路。
+    if update::e2e().is_some() && matches!(status.view, update::View::Ready { .. }) && std::env::var_os("PONTEX_UPDATE_E2E_INSTALL").is_some() {
+        let runtime = app.state::<Runtime>();
+        if let Err(error) = restart_to_update(app, &runtime).await {
+            log::error!("[PONTEX] e2e 更新安装失败: {error}");
+        }
+    }
+    // 准备好了：把主窗口叫出来，弹「有新版本」窗口。每个版本一次，点了「稍后」一天后再弹。
+    if let update::View::Ready { version, .. } = &status.view {
+        let prefs = core.prefs();
+        let now = chrono::Utc::now().timestamp();
+        if update::should_prompt(version, prefs.update_prompted.as_ref(), now) {
+            let _ = core.set_prefs(Prefs { update_prompted: Some((version.clone(), now)), ..prefs });
+            show_main(app);
+            let _ = app.emit(EVENT_UPDATE, version);
+        }
+    }
+    publish(app);
+    status
+}
+
+#[tauri::command]
+async fn px_update_check(app: AppHandle, runtime: State<'_, Runtime>) -> Result<update::Status, String> {
+    let core = runtime.core()?;
+    Ok(self_update(&app, &core, true).await)
+}
+
+/// 重启更新。正在装 Agent、正在切换时先不装。
+#[tauri::command]
+async fn px_update_install(app: AppHandle, runtime: State<'_, Runtime>) -> Result<(), String> {
+    restart_to_update(&app, &runtime).await
+}
+
+pub async fn restart_to_update(app: &AppHandle, runtime: &Runtime) -> Result<(), String> {
+    let core = runtime.core()?;
+    if runtime.jobs.running.load(Ordering::SeqCst) {
+        return Err("UPDATE_BUSY_INSTALLING".into());
+    }
+    let _guard = core.op.try_lock().map_err(|_| "UPDATE_BUSY_SWITCHING".to_string())?;
+    upstream::settle();
+    let result = blocking(update::install).await?;
+    publish(app);
+    result?;
+    // macOS：新的 .app 已经换好，重开就是新版。Windows 走不到这里（安装程序接手、本进程已退出）。
+    app.restart();
 }
 
 // ---------- AI 工具箱 ----------
@@ -844,6 +907,16 @@ fn startup_code(detail: &str) -> &'static str {
 /// 后台循环：检测、接入、查新版。
 fn run_core(app: &AppHandle, core: Arc<Core>) {
     autostart::by_default(&core);
+    let (updater, updater_core) = (app.clone(), core.clone());
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(update::first_check()).await;
+        loop {
+            if updater_core.prefs().auto_update {
+                self_update(&updater, &updater_core, false).await;
+            }
+            tokio::time::sleep(update::INTERVAL).await;
+        }
+    });
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
@@ -903,6 +976,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(
             tauri_plugin_window_state::StateFlags::POSITION | tauri_plugin_window_state::StateFlags::SIZE,
         ).build())
@@ -1015,11 +1089,20 @@ pub fn run() {
             px_mcp_save,
             px_mcp_delete,
             px_mcp_check,
+            px_update_check,
+            px_update_install,
         ])
         .build(tauri::generate_context!())
         .expect("PonteX One failed to start")
         .run(|app, event| match event {
-            tauri::RunEvent::Exit => upstream::settle(),
+            tauri::RunEvent::Exit => {
+                upstream::settle();
+                // macOS：退出时把下好的新版装上，下次打开就是新版。
+                let auto = app.state::<Runtime>().started().is_ok_and(|core| core.prefs().auto_update);
+                if auto {
+                    update::install_on_exit();
+                }
+            }
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => show_main(app),
             _ => {

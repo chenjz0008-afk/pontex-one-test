@@ -1,0 +1,133 @@
+name: PonteX One self-update e2e
+# 在真机上走一遍自动更新：装旧版 → 本机起一个更新清单 → 旧版自己发现、下载、核对签名、装上、重开 → 确认变成新版。
+# 用一把当场生成、用完就扔的密钥（正式私钥从不进 CI）；清单只能指到 127.0.0.1，而且只有带 PONTEX_UPDATE_E2E 编出来的包才认。
+# macOS 那台顺带验证 dmgbuild 打出来的 DMG 通过检查。
+#   推 pontex-update-e2e-* 标签或手动触发；结果在每台机器的 update-e2e-<系统> 产物里。
+on:
+  push:
+    tags: ["pontex-update-e2e-*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  PONTEX_UPDATE_E2E: "1"
+  OLD: "0.0.1"
+  NEW: "0.0.2"
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 120
+    defaults: { run: { shell: bash } }
+    steps:
+      - uses: actions/checkout@v6
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.12.3 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with: { targets: aarch64-apple-darwin }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: src-tauri, key: update-e2e-macos }
+      - name: Throwaway signing key
+        run: |
+          pnpm install --frozen-lockfile
+          mkdir -p out srv
+          node_modules/.bin/tauri signer generate --ci -p e2e -w "$RUNNER_TEMP/e2e.key"
+          node tools/e2e-update.mjs config "$RUNNER_TEMP/e2e.key.pub" "$OLD"
+      - name: Build and install the old version
+        run: |
+          node tools/pontex.mjs build --target aarch64-apple-darwin --bundles app 2>&1 | tail -20
+          ditto "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/PonteX One.app" "/Applications/PonteX One.app"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "/Applications/PonteX One.app/Contents/Info.plist" | tee -a out/report.txt
+      - name: Build the new version (DMG through dmgbuild + update package)
+        run: |
+          node tools/e2e-update.mjs config "$RUNNER_TEMP/e2e.key.pub" "$NEW"
+          node tools/pontex.mjs build --target aarch64-apple-darwin --bundles app,dmg 2>&1 | tail -20
+          b=src-tauri/target/aarch64-apple-darwin/release/bundle
+          cp "$b/macos/PonteX One.app.tar.gz" srv/new.app.tar.gz
+          cp "$b"/dmg/*.dmg out/
+          node_modules/.bin/tauri signer sign -f "$RUNNER_TEMP/e2e.key" -p e2e srv/new.app.tar.gz
+          node tools/e2e-update.mjs manifest srv "$NEW" darwin-aarch64 new.app.tar.gz
+      - name: Old version finds, downloads, verifies, installs and relaunches
+        run: |
+          (cd srv && python3 -m http.server 8765 >/dev/null 2>&1 &)
+          sleep 2
+          PONTEX_UPDATE_ENDPOINT=http://127.0.0.1:8765/stable.json PONTEX_UPDATE_E2E_INSTALL=1 \
+            "/Applications/PonteX One.app/Contents/MacOS/pontex-one" > out/old.log 2>&1 &
+          for i in $(seq 1 120); do
+            v=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "/Applications/PonteX One.app/Contents/Info.plist" 2>/dev/null)
+            if [ "$v" = "$NEW" ] && pgrep -f "PonteX One.app/Contents/MacOS/pontex-one" >/dev/null; then echo "updated to $v and running after ${i}s" | tee -a out/report.txt; break; fi
+            sleep 2
+          done
+          sleep 5
+          screencapture -x out/after-update.png || true
+          cp ~/.pontex-one/logs/*.log out/ 2>/dev/null || true
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' '/Applications/PonteX One.app/Contents/Info.plist')" = "$NEW"
+          pgrep -f "PonteX One.app/Contents/MacOS/pontex-one"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: update-e2e-macOS, path: out/* }
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    defaults: { run: { shell: bash } }
+    steps:
+      - uses: actions/checkout@v6
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.12.3 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with: { targets: x86_64-pc-windows-msvc }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: src-tauri, key: update-e2e-windows }
+      - name: Throwaway signing key
+        run: |
+          pnpm install --frozen-lockfile
+          mkdir -p out srv
+          node_modules/.bin/tauri signer generate --ci -p e2e -w "$RUNNER_TEMP/e2e.key"
+          node tools/e2e-update.mjs config "$RUNNER_TEMP/e2e.key.pub" "$OLD"
+      - name: Build and install the old version (per-user MSI)
+        run: |
+          node tools/pontex.mjs build --target x86_64-pc-windows-msvc --bundles msi 2>&1 | tail -20
+          cp src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*zh-CN.msi out/old.msi
+      - name: Install old
+        shell: pwsh
+        run: |
+          $p = Start-Process msiexec -ArgumentList "/i `"$PWD\out\old.msi`" /qn /norestart /l*v out\old-install.log" -Wait -PassThru
+          "install old exit $($p.ExitCode)" | Tee-Object -FilePath out/report.txt -Append
+      - name: Build the new version
+        run: |
+          node tools/e2e-update.mjs config "$RUNNER_TEMP/e2e.key.pub" "$NEW"
+          node tools/pontex.mjs build --target x86_64-pc-windows-msvc --bundles msi 2>&1 | tail -20
+          cp src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*zh-CN.msi srv/new.msi
+          node_modules/.bin/tauri signer sign -f "$RUNNER_TEMP/e2e.key" -p e2e srv/new.msi
+          node tools/e2e-update.mjs manifest srv "$NEW" windows-x86_64 new.msi
+      - name: Old version finds, downloads, verifies, installs and relaunches
+        shell: pwsh
+        run: |
+          Start-Process python -ArgumentList '-m', 'http.server', '8765', '--directory', 'srv' -WindowStyle Hidden
+          Start-Sleep 2
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\PonteX One\pontex-one.exe'
+          "old exe: $exe $(Test-Path $exe)" | Tee-Object -FilePath out/report.txt -Append
+          $env:PONTEX_UPDATE_ENDPOINT = 'http://127.0.0.1:8765/stable.json'
+          $env:PONTEX_UPDATE_E2E_INSTALL = '1'
+          Start-Process $exe
+          # 装好的版本：看 exe 自己的版本号（MSI 换掉了文件才会变）
+          function Ver { if (Test-Path $exe) { (Get-Item $exe).VersionInfo.ProductVersion } }
+          $ok = $false
+          for ($i = 0; $i -lt 120; $i++) {
+            $v = Ver
+            if ("$v" -like "$($env:NEW)*" -and (Get-Process pontex-one -ErrorAction SilentlyContinue)) { "updated to $v and running after $($i*2)s" | Tee-Object -FilePath out/report.txt -Append; $ok = $true; break }
+            Start-Sleep 2
+          }
+          Start-Sleep 5
+          Copy-Item "$env:USERPROFILE\.pontex-one\logs\*.log" out\ -ErrorAction SilentlyContinue
+          "final version: $(Ver)" | Tee-Object -FilePath out/report.txt -Append
+          if (-not $ok) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: update-e2e-Windows, path: out/* }

@@ -90,6 +90,8 @@ pub struct Snapshot {
     pub prefs: Prefs,
     pub cc_switch_present: bool,
     pub data_dir: String,
+    /// PonteX One 自己的更新。
+    pub update: super::update::Status,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -130,6 +132,19 @@ impl Core {
     /// 上游引擎：AI 工具箱的 MCP 走它。写之前先拿 `op` 锁（和切换写同一批文件）。
     pub fn engine(&self) -> &Engine {
         &self.engine
+    }
+
+    /// 这台电脑的随机编号（第一次用时生成）。
+    pub fn install_id(&self) -> String {
+        if let Some(id) = self.locked().install_id.clone() {
+            return id;
+        }
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let fresh = id.clone();
+        let _ = self.edit(move |store| {
+            store.install_id.get_or_insert(fresh);
+        });
+        self.locked().install_id.clone().unwrap_or(id)
     }
 
     pub fn prefs(&self) -> Prefs {
@@ -211,6 +226,7 @@ impl Core {
                 .join(".cc-switch/cc-switch.db")
                 .exists(),
             data_dir: upstream::device_dir().display().to_string(),
+            update: super::update::status(),
         }
     }
 

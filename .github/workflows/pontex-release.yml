@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
-      # 测试快照里清空过上游的两个值、删了上游工作流，边界检查在 PonteX_One 里跑
+      - run: node tools/pontex.mjs check
       - name: Tag matches product version
         if: github.ref_type == 'tag'
         run: |
@@ -25,7 +25,7 @@ jobs:
     if: ${{ !startsWith(github.ref_name, 'pontex-win-v') }}
     uses: ./.github/workflows/pontex-package.yml
     permissions: { contents: write }
-    with: { os: macos-latest, target: universal-apple-darwin, bundles: "app,dmg", find: "dmg/*.dmg", asset: macOS-universal.dmg }
+    with: { os: macos-latest, target: universal-apple-darwin, bundles: "app,dmg", find: "dmg/*.dmg", asset: macOS-universal.dmg, update_find: "macos/*.app.tar.gz", update_asset: macOS-universal.app.tar.gz }
   windows-x64:
     needs: tag
     uses: ./.github/workflows/pontex-package.yml

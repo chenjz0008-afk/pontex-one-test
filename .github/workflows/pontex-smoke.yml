@@ -109,6 +109,17 @@ jobs:
           say "$(sw_vers -productVersion) $(uname -m)"
           dmg=$(ls *.dmg | head -1); test -n "$dmg" || { say "NO DMG"; exit 1; }
           say "$dmg $(shasum -a 256 "$dmg")"
+          # 拖拽安装窗口：用访达真的打开一次，浅色、深色各截一张
+          hdiutil attach -noautoopen -quiet "$dmg"
+          vol="/Volumes/PonteX One"; say "volume: $(ls -a "$vol" | tr '\n' ' ')"
+          open "$vol"; sleep 4; screencapture -x out/dmg-window.png
+          if osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' 2>/dev/null; then
+            osascript -e 'tell application "Finder" to close every window' 2>/dev/null || true
+            open "$vol"; sleep 4; screencapture -x out/dmg-window-dark.png
+            osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' 2>/dev/null || true
+          else say "dark mode: could not switch"; fi
+          osascript -e 'tell application "Finder" to close every window' 2>/dev/null || true
+          hdiutil detach -quiet "$vol" || hdiutil detach -force -quiet "$vol" || true
           hdiutil attach -nobrowse -quiet -mountpoint /tmp/px "$dmg"; say "dmg: $(ls -a /tmp/px | tr '\n' ' ')"
           cp -R "/tmp/px/PonteX One.app" /Applications/; hdiutil detach -quiet /tmp/px
           codesign --verify --deep --strict "/Applications/PonteX One.app" && say "codesign ok"

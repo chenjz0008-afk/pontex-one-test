@@ -158,7 +158,21 @@ export interface Prefs {
   /** 在文件夹里打开过一次 Agent（之后不再显示说明）。 */
   launched_once: boolean;
   toolbox_notice_seen: boolean;
+  /** 自动下载 PonteX One 的新版本。 */
+  auto_update: boolean;
+  update_prompted: [string, number] | null;
+  /** 上次打开时的版本：变了就提示「已更新到 …」。 */
+  last_version: string | null;
 }
+
+/** PonteX One 自己的更新。 */
+export type SelfUpdate = (
+  | { state: "idle" | "checking" | "installing" | "unsupported"; version?: string }
+  | { state: "latest"; at: number }
+  | { state: "downloading"; version: string; received: number; total: number | null }
+  | { state: "ready"; version: string; current: string; notes: string | null; notes_en: string | null }
+  | { state: "failed"; reason: string }
+) & { required: string | null };
 
 /** 用过的文件夹，最近的在前。 */
 export interface Folder {
@@ -213,6 +227,7 @@ export interface Snapshot {
   prefs: Prefs;
   cc_switch_present: boolean;
   data_dir: string;
+  update: SelfUpdate;
 }
 
 export type View =
@@ -331,6 +346,9 @@ export const api = {
     invoke<[number, Recent] | null>("px_forget_folder", { path }),
   restoreFolder: (index: number, recent: Recent) =>
     invoke<void>("px_restore_folder", { index, recent }),
+  // PonteX One 自己的更新
+  updateCheck: () => invoke<SelfUpdate>("px_update_check"),
+  updateInstall: () => invoke<void>("px_update_install"),
   // AI 工具箱
   toolbox: () => invoke<Toolbox>("px_toolbox"),
   skillToggle: (dir: string, agent: AgentId, enabled: boolean) =>
@@ -347,5 +365,7 @@ export const onState = (handler: (view: View) => void) =>
   listen<View>("px://state", (event) => handler(event.payload));
 export const onInstall = (handler: (p: Progress) => void) =>
   listen<Progress>("px://install", (event) => handler(event.payload));
+export const onUpdate = (handler: (version: string) => void) =>
+  listen<string>("px://update", (event) => handler(event.payload));
 export const onSkill = (handler: () => void) =>
   listen("px://skill", () => handler());

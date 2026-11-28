@@ -23,6 +23,8 @@ pub struct Store {
     pub prefs: Prefs,
     /// 已经替用户打开过一次开机启动。之后开关都听他的。
     pub autostart_set: bool,
+    /// 这台电脑的随机编号，只用来决定分批推送时排在哪一批；不上传。
+    pub install_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -81,6 +83,12 @@ pub struct Prefs {
     pub launched_once: bool,
     /// 看过「已读入各 Agent 里现有的 MCP」。
     pub toolbox_notice_seen: bool,
+    /// 自动下载 PonteX One 的新版本（macOS 退出时自动装好）。
+    pub auto_update: bool,
+    /// 上次弹出「有新版本」窗口：哪个版本、什么时候。每个版本弹一次，点「稍后」一天后再弹。
+    pub update_prompted: Option<(String, i64)>,
+    /// 上次打开时的版本：变了就提示「已更新到 …」。
+    pub last_version: Option<String>,
 }
 
 impl Default for Prefs {
@@ -94,6 +102,9 @@ impl Default for Prefs {
             terminal: None,
             launched_once: false,
             toolbox_notice_seen: false,
+            auto_update: true,
+            update_prompted: None,
+            last_version: None,
         }
     }
 }

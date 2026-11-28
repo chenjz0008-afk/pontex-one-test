@@ -9,6 +9,9 @@ on:
       bundles: { type: string, required: true }
       find: { type: string, required: true }
       asset: { type: string, required: true }
+      # 可选：自动更新用的包（macOS 的 .app.tar.gz）
+      update_find: { type: string, required: false, default: "" }
+      update_asset: { type: string, required: false, default: "" }
 jobs:
   build:
     runs-on: ${{ inputs.os }}
@@ -51,7 +54,10 @@ jobs:
           {
             pnpm install --frozen-lockfile &&
             node tools/pontex.mjs build --target ${{ inputs.target }} --bundles ${{ inputs.bundles }} &&
-            cp src-tauri/target/${{ inputs.target }}/release/bundle/${{ inputs.find }} "out/PonteX-One-$version-${{ inputs.asset }}"
+            cp src-tauri/target/${{ inputs.target }}/release/bundle/${{ inputs.find }} "out/PonteX-One-$version-${{ inputs.asset }}" &&
+            if [ -n "${{ inputs.update_find }}" ]; then
+              cp src-tauri/target/${{ inputs.target }}/release/bundle/${{ inputs.update_find }} "out/PonteX-One-$version-${{ inputs.update_asset }}"
+            fi
           } 2>&1 | tee build.log
       - name: Keep the end of the log
         if: always()
