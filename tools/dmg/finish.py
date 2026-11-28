@@ -47,6 +47,10 @@ def main(source: str, out: str, icon: str) -> None:
         # 访达改写时会删掉卷图标、清掉「使用自定义图标」标记：放回去、补上，桌面上的盘才是 PonteX One
         shutil.copyfile(icon, os.path.join(mount, ".VolumeIcon.icns"))
         run("SetFile", "-a", "C", mount)
+        # 访达打开窗口时会往 .app 上写访达信息（扩展属性），签名严格检查不允许：清掉，恢复成签名时的样子
+        for name in os.listdir(mount):
+            if name.endswith(".app"):
+                run("xattr", "-cr", os.path.join(mount, name))
         run("sync")
     finally:
         run("hdiutil", "detach", mount)

@@ -52,6 +52,9 @@ def check(mount: str) -> None:
     for need in (".DS_Store", APP, "Applications", ".VolumeIcon.icns"):
         if need not in names:
             fail(f"缺少 {need}（现有：{', '.join(sorted(names))}）")
+    signed = subprocess.run(["codesign", "--verify", "--deep", "--strict", os.path.join(mount, APP)], capture_output=True, text=True)
+    if signed.returncode != 0:
+        fail(f"{APP} 的签名不完整：{signed.stderr.strip()}")
     flags = subprocess.run(["GetFileInfo", "-aC", mount], capture_output=True, text=True).stdout.strip()
     if flags != "1":
         fail("卷没有用自定义图标（桌面上会显示成普通磁盘）")
