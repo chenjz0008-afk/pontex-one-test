@@ -12,7 +12,11 @@ import subprocess
 import sys
 import tempfile
 
+import ds_store.store
 from ds_store import DSStore
+
+# 访达自己写的背景书签（pBBk）ds_store 解析不了，一读整份 .DS_Store 就报错：不解析它，只当原始数据。
+ds_store.store.codecs.pop(b"pBBk", None)
 
 APP = "PonteX One.app"
 WANT_ICONS = {APP: (165, 200), "Applications": (495, 200)}
