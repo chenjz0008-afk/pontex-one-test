@@ -18,6 +18,12 @@ APP = "PonteX One.app"
 WANT_ICONS = {APP: (165, 200), "Applications": (495, 200)}
 
 
+def has_bookmark(path: str) -> bool:
+    """.DS_Store 里有没有「.」的 pBB0 记录：文件名 "."（UTF-16，长度 1）+ 代码 pBB0 + 类型 blob。"""
+    with open(path, "rb") as f:
+        return b"\x00\x00\x00\x01\x00.pBB0blob" in f.read()
+
+
 def fail(message: str) -> None:
     print(f"✗ DMG 检查失败：{message}")
     sys.exit(1)
@@ -79,9 +85,8 @@ def check(mount: str) -> None:
             fail(f"窗口没有用图片背景（backgroundType={icvp.get('backgroundType')}）")
         if not icvp.get("backgroundImageAlias"):
             fail("背景图没有挂上（缺 backgroundImageAlias）")
-        try:
-            store["."]["pBB0"]
-        except KeyError:
+        # 访达写的书签 ds_store 解析不了，只看记录在不在（「.」的 pBB0，类型 blob）
+        if not has_bookmark(os.path.join(mount, ".DS_Store")):
             fail("缺少访达写的背景书签（pBB0）：背景不是访达设的，新版 macOS 不会显示")
         if int(icvp.get("iconSize", 0)) != 128:
             fail(f"图标大小是 {icvp.get('iconSize')}，应该是 128")
