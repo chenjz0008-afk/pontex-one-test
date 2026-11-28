@@ -5,7 +5,7 @@
 //
 // 规则固定、可重复，不靠手工复制：
 //   · 只同步 HEAD 里已提交的文件；测试仓库里多出来的删掉。
-//   · 工作流只留 pontex-*（上游的不跑）。
+//   · 工作流只留打包、测试用的 pontex-*（上游的、定时同步上游的都不跑）。
 //   · 两处测试仓库专用的补丁，对不上就失败（上游改了要重新看）：
 //       清空 Gemini OAuth 常量（GitHub 推送保护会拦）；打包流程跳过上游边界检查（清空的常量会让它失败）。
 //   · 推之前扫一遍：不许出现作者邮箱、源站地址（取自 PONTEX_REMOTE，不打印）。
@@ -45,7 +45,9 @@ function replaceOnce(text, pattern, replacement) {
   return text.replace(pattern, replacement);
 }
 
-const keep = (path) => !path.startsWith(".github/workflows/") || /^\.github\/workflows\/pontex-[^/]+$/.test(path);
+// 工作流只留打包、测试用的 pontex-*；上游同步是定时任务、会开 PR，只在 PonteX_One 里跑。
+const SKIP = new Set([".github/workflows/pontex-upstream-sync.yml"]);
+const keep = (path) => !SKIP.has(path) && (!path.startsWith(".github/workflows/") || /^\.github\/workflows\/pontex-[^/]+$/.test(path));
 const files = git(ROOT, ["ls-tree", "-r", "--name-only", "HEAD"]).split("\n").filter(Boolean).filter(keep);
 const wanted = new Set(files);
 
