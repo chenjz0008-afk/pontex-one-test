@@ -44,11 +44,11 @@ def check(mount: str) -> None:
             fail(f"缺少 {need}（现有：{', '.join(sorted(names))}）")
     if os.readlink(os.path.join(mount, "Applications")) != "/Applications":
         fail("Applications 不是指向 /Applications 的快捷方式")
-    # dmgbuild 把背景放在根目录的 .background.tiff；tauri 放在 .background/ 里
+    # 背景在 .background/background.tiff（finish.py 挪过去的；根目录的点开头文件新版访达不认）
     folder = os.path.join(mount, ".background")
-    has_background = ".background.tiff" in names or (os.path.isdir(folder) and os.listdir(folder))
+    has_background = os.path.isfile(os.path.join(folder, "background.tiff"))
     if not has_background:
-        fail("没有背景图")
+        fail("没有背景图 .background/background.tiff")
 
     with DSStore.open(os.path.join(mount, ".DS_Store"), "r") as store:
         for name, (x, y) in WANT_ICONS.items():
