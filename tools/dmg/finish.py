@@ -26,11 +26,12 @@ def main(source: str, out: str) -> None:
     try:
         # 和访达自己存的一样：背景放在隐藏的 .background/ 文件夹里，文件名本身不以点开头
         # （dmgbuild 放在根目录的 .background.tiff，新版访达不认）
-        loose = os.path.join(mount, ".background.tiff")
-        if not os.path.exists(loose):
-            sys.exit("✗ 可写 DMG 里没有 .background.tiff")
+        found = [n for n in os.listdir(mount) if n.startswith(".background.")]
+        if len(found) != 1:
+            sys.exit(f"✗ 可写 DMG 里的背景图不对：{found}")
+        loose = os.path.join(mount, found[0])
         os.makedirs(os.path.join(mount, ".background"), exist_ok=True)
-        background = os.path.join(mount, ".background", "background.tiff")
+        background = os.path.join(mount, ".background", "background" + os.path.splitext(found[0])[1])
         os.replace(loose, background)
         with DSStore.open(os.path.join(mount, ".DS_Store"), "r+") as store:
             icvp = store["."]["icvp"]
