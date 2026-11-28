@@ -42,6 +42,9 @@ def check(mount: str) -> None:
     for need in (".DS_Store", APP, "Applications", ".VolumeIcon.icns"):
         if need not in names:
             fail(f"缺少 {need}（现有：{', '.join(sorted(names))}）")
+    flags = subprocess.run(["GetFileInfo", "-aC", mount], capture_output=True, text=True).stdout.strip()
+    if flags != "1":
+        fail("卷没有用自定义图标（桌面上会显示成普通磁盘）")
     if os.readlink(os.path.join(mount, "Applications")) != "/Applications":
         fail("Applications 不是指向 /Applications 的快捷方式")
     # 背景在 .background/background.tiff（finish.py 挪过去的；根目录的点开头文件新版访达不认）
@@ -79,7 +82,7 @@ def check(mount: str) -> None:
         try:
             store["."]["pBB0"]
         except KeyError:
-            fail("缺少新版访达认的背景书签（pBB0），新版 macOS 不会显示背景")
+            fail("缺少访达写的背景书签（pBB0）：背景不是访达设的，新版 macOS 不会显示")
         if int(icvp.get("iconSize", 0)) != 128:
             fail(f"图标大小是 {icvp.get('iconSize')}，应该是 128")
         if icvp.get("arrangeBy") not in (None, "none"):
