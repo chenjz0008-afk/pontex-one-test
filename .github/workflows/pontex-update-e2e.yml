@@ -93,7 +93,7 @@ jobs:
       - name: Build and install the old version (per-user MSI)
         run: |
           node tools/pontex.mjs build --target x86_64-pc-windows-msvc --bundles msi 2>&1 | tail -20
-          cp src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*zh-CN.msi out/old.msi
+          cp src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*"_${OLD}_"*zh-CN.msi out/old.msi
       - name: Install old
         shell: pwsh
         run: |
@@ -103,7 +103,7 @@ jobs:
         run: |
           node tools/e2e-update.mjs config "$RUNNER_TEMP/e2e.key.pub" "$NEW"
           node tools/pontex.mjs build --target x86_64-pc-windows-msvc --bundles msi 2>&1 | tail -20
-          cp src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*zh-CN.msi srv/new.msi
+          cp src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*"_${NEW}_"*zh-CN.msi srv/new.msi
           node_modules/.bin/tauri signer sign -f "$RUNNER_TEMP/e2e.key" -p e2e srv/new.msi
           node tools/e2e-update.mjs manifest srv "$NEW" windows-x86_64 new.msi
       - name: Old version finds, downloads, verifies, installs and relaunches

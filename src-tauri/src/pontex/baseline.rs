@@ -193,9 +193,7 @@ fn codex_key_fields(third_party: bool) -> Option<Value> {
         providers.insert(provider, table);
         out.insert("model_providers", Item::Table(providers));
     }
-    if out.iter().next().is_none() {
-        return None;
-    }
+    out.iter().next()?;
     let auth = third_party
         .then(|| std::fs::read(upstream::codex_auth()).ok())
         .flatten()

@@ -1,0 +1,58 @@
+name: PonteX One upstream sync
+# 每周一取「发布满 5 天」的最新稳定 tag；也可以手动指定。只开 PR，不合并、不发版。
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "CC Switch tag，例如 v4.0.41；留空自动选"
+        required: false
+  schedule:
+    - cron: "17 2 * * 1"
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 用 GitHub App 的 token：GITHUB_TOKEN 开的 PR 不会触发检查，也不能改 workflow 文件。
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.PONTEX_SYNC_APP_ID }}
+          private-key: ${{ secrets.PONTEX_SYNC_APP_KEY }}
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0, ref: pontex/main, token: "${{ steps.app.outputs.token }}" }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+      - name: Pick tag
+        id: pick
+        env: { GH_TOKEN: "${{ steps.app.outputs.token }}", WANTED: "${{ inputs.tag }}" }
+        run: |
+          tag="$WANTED"
+          if [ -z "$tag" ]; then
+            tag=$(gh api 'repos/farion1231/cc-switch/releases?per_page=30' --jq \
+              '[.[] | select((.draft or .prerelease | not) and (.published_at | fromdate) < (now - 5*86400))][0].tag_name // empty')
+          fi
+          current=$(node -p "require('./pontex/upstream.json').tag")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          [ -n "$tag" ] && [ "$tag" != "$current" ] && ! git ls-remote --exit-code --heads origin "sync/cc-switch-$tag" && echo "go=1" >> "$GITHUB_OUTPUT" || true
+      - name: Sync
+        if: steps.pick.outputs.go
+        run: |
+          git config user.name pontex-upstream-bot
+          git config user.email pontex-upstream-bot@users.noreply.github.com
+          node tools/pontex.mjs sync "${{ steps.pick.outputs.tag }}"
+          node tools/pontex.mjs check
+          git push origin HEAD
+      - name: Open PR
+        if: steps.pick.outputs.go
+        env: { GH_TOKEN: "${{ steps.app.outputs.token }}" }
+        run: gh pr create --base pontex/main --head "sync/cc-switch-${{ steps.pick.outputs.tag }}" --title "CC Switch ${{ steps.pick.outputs.tag }}" --body-file release/upstream-report.md
+      # 失败只会是「锚点没了 / 上游删了文件」：同一个 tag 只开一个 issue。
+      - name: Report
+        if: failure() && steps.pick.outputs.tag
+        env: { GH_TOKEN: "${{ steps.app.outputs.token }}" }
+        run: |
+          title="CC Switch ${{ steps.pick.outputs.tag }} 需要更新 hook"
+          [ -n "$(gh issue list --search "in:title $title" --state open --json number --jq '.[].number')" ] || \
+            gh issue create --title "$title" --body "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

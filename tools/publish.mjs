@@ -137,6 +137,11 @@ for (const [kind, targets] of Object.entries(UPDATE_KINDS)) {
   if (!dryRun && !verifySignature(readFileSync(join(dir, file)), signatures[file])) die(`${file} 签完核对不过：私钥和软件里的公钥不是一对`);
   for (const target of targets) platforms[target] = { url: `${SITE}/downloads/one/${version}/${file}`, signature: signatures[file] };
 }
+// 同一版本后补平台：保留线上更新清单里已有的平台（签名不变），只加新的。
+if (current?.version === version) {
+  const online = await fetch(`${SITE}/downloads/one/update/stable.json?t=${Date.now()}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (online?.version === version) for (const [target, entry] of Object.entries(online.platforms ?? {})) platforms[target] ??= entry;
+}
 // 新版本必须带齐 macOS 和 Windows 的更新包（同一版本后补平台时例外）。
 if (current?.version !== version) for (const need of ["darwin-aarch64", "windows-x86_64", "windows-aarch64"]) if (!platforms[need]) die(`缺少 ${need} 的更新包`);
 const rollout = Number(flag("--rollout") ?? 100);

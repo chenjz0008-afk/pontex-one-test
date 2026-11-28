@@ -12,6 +12,8 @@ if (command === "config") {
   const config = JSON.parse(readFileSync(file, "utf8"));
   config.version = version;
   config.plugins.updater.pubkey = readFileSync(pub, "utf8").trim();
+  // 测试清单在 127.0.0.1 上走 http；只有这种测试包允许，正式包一律 https。
+  config.plugins.updater.dangerousInsecureTransportProtocol = true;
   writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
   console.log(`config: version ${version}, e2e pubkey`);
 } else if (command === "manifest") {

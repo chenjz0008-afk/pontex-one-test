@@ -39,7 +39,7 @@ async fn mirror(bytes: Vec<u8>, mode: Mode) -> (String, Arc<AtomicUsize>) {
     (url, hits)
 }
 
-fn serve(bytes: &mut Vec<u8>, mode: Mode, headers: &HeaderMap) -> Response {
+fn serve(bytes: &mut [u8], mode: Mode, headers: &HeaderMap) -> Response {
     if matches!(mode, Mode::Missing) {
         return StatusCode::NOT_FOUND.into_response();
     }
