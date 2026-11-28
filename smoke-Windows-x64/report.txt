@@ -1,0 +1,69 @@
+vcruntime140.dll in System32: False
+vcruntime140_1.dll in System32: False
+msi PonteX-One-0.11.1-Windows-x64.msi BEDDD9307DC42F2CFFFCFD7D30AB57A19AB534A5B11BE62E187A5071E1C5B549
+install exit 0
+files: LICENSE-CC-Switch.txt, pontex-one.exe, Uninstall PonteX One.lnk
+deep link: "C:\Users\RUNNER~1\AppData\Local\Programs\PONTEX~1\PONTEX~1.EXE" "%1"
+start menu: True
+alive: True  title: PonteX One 经纬即连
+run key: "C:\Users\runneradmin\AppData\Local\Programs\PonteX One\pontex-one.exe" --hidden
+--- data dir
+logs, cc-switch.db, cc-switch.db-shm, cc-switch.db-wal, model-pricing.json, pontex-state.json, settings.json
+--- log
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 检测到 user_version=0，迁移到 1（补齐缺失列并设置版本）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v1 到 v2（添加使用统计表和完整字段，重构 skills 表）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 已为表 providers 添加缺失列 cost_multiplier
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 已为表 providers 添加缺失列 limit_daily_usd
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 已为表 providers 添加缺失列 limit_monthly_usd
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 已为表 providers 添加缺失列 provider_type
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 已插入 243 条默认模型定价数据
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] skills 表已经是 v3 结构，跳过 v1 -> v2 迁移
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] proxy_config 已经是三行结构，跳过迁移
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v2 到 v3（Skills 统一管理架构）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] skills 表已经是 v3 结构，跳过迁移
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v3 到 v4（OpenCode 支持）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] v3 -> v4 迁移完成：已添加 OpenCode 支持
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v4 到 v5（计费模式支持）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] v4 -> v5 迁移完成：已添加计费模式与请求模型字段
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v5 到 v6（使用量聚合表 + Copilot 模板类型统一）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] v5 -> v6 迁移完成：已添加使用量日聚合表，统一 copilot 模板类型
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v6 到 v7（Skills 更新检测支持）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] v6 -> v7 迁移完成：已添加 content_hash 和 updated_at 列
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v7 到 v8（会话日志使用追踪 + 修正模型定价）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] v7 -> v8 迁移完成：data_source 列、session_log_sync 表、修正 13 个模型定价
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v8 到 v9（全面补充模型定价）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 已插入 243 条默认模型定价数据
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] v8 -> v9 迁移完成：已刷新全部模型定价数据
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v9 到 v10（添加 Hermes Agent 支持）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] v9 -> v10 迁移完成：已添加 Hermes Agent 支持
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v10 到 v11（usage_daily_rollups 保留 request_model 维度）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] v10 -> v11 迁移完成：usage_daily_rollups 已保留 request_model/pricing_model 维度
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v11 到 v12（添加项目 Profiles 表）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v12 到 v13（记录输入 token 缓存语义）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 已为表 usage_daily_rollups 添加缺失列 input_token_semantics
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v13 到 v14（添加 Grok Build 代理配置）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v14 到 v15（Skills/MCP 添加 Grok Build 支持）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v15 到 v16（重建 Codex 会话用量）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v16 到 v17（添加会话用量持久去重账本）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v17 到 v18（会话日志字节游标列）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 迁移数据库从 v19 到 v20（MCP 添加 Pi 支持）
+[2026-11-28][09:16:27][cc_switch_lib::database::schema][INFO] 已插入 243 条默认模型定价数据
+[2026-11-28][09:16:27][cc_switch_lib::database::dao::providers][INFO] ✓ Seeded official provider: Claude Official (claude)
+[2026-11-28][09:16:27][cc_switch_lib::database::dao::providers][INFO] ✓ Seeded official provider: Claude Desktop Official (claude-desktop)
+[2026-11-28][09:16:27][cc_switch_lib::database::dao::providers][INFO] ✓ Seeded official provider: OpenAI Official (codex)
+[2026-11-28][09:16:27][cc_switch_lib::database::dao::providers][INFO] ✓ Seeded official provider: Google Official (gemini)
+[2026-11-28][09:16:27][cc_switch_lib::database::dao::providers][INFO] ✓ Seeded official provider: Grok Official (grokbuild)
+[2026-11-28][09:16:27][cc_switch_lib::pontex::app][INFO] [PONTEX] PonteX One 0.11.1 · CC Switch 4.0.40 · https://api.ponte-x.com
+[2026-11-28][09:16:32][tauri_plugin_updater::updater][ERROR] update endpoint did not respond with a successful status code
+[2026-11-28][09:16:32][cc_switch_lib::pontex::update][WARN] [PONTEX] 检查 PonteX One 更新失败: Could not fetch a valid release JSON from the remote
+
+instances: 1
+--- log after link
+[2026-11-28][09:16:27][cc_switch_lib::database::dao::providers][INFO] ✓ Seeded official provider: Grok Official (grokbuild)
+[2026-11-28][09:16:27][cc_switch_lib::pontex::app][INFO] [PONTEX] PonteX One 0.11.1 · CC Switch 4.0.40 · https://api.ponte-x.com
+[2026-11-28][09:16:32][tauri_plugin_updater::updater][ERROR] update endpoint did not respond with a successful status code
+[2026-11-28][09:16:32][cc_switch_lib::pontex::update][WARN] [PONTEX] 检查 PonteX One 更新失败: Could not fetch a valid release JSON from the remote
+[2026-11-28][09:16:47][cc_switch_lib::pontex::app][INFO] [PONTEX] 收到技能链接: brandkit
+
+uninstall exit 0  left: False
+SMOKE OK
