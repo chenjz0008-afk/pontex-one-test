@@ -25,6 +25,8 @@ pub struct Store {
     pub autostart_set: bool,
     /// 这台电脑的随机编号，只用来决定分批推送时排在哪一批；不上传。
     pub install_id: Option<String>,
+    /// 上次启动后正常跑满了一分钟。没跑满（比如一启动就崩）就马上查更新，等修复版。
+    pub ran_ok: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

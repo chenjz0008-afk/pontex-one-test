@@ -9,7 +9,8 @@ app = defines["app"]  # noqa: F821  dmgbuild 注入
 name = os.path.basename(app)
 here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
 
-format = "ULMO"  # LZMA：最小；macOS 10.15+ 都能打开（我们要求 12+）
+# 先打可写的（finish.py 要补背景书签），再由 finish.py 压成 ULMO（LZMA，macOS 10.15+ 都能打开）
+format = defines.get("format", "ULMO")  # noqa: F821
 filesystem = "HFS+"
 size = None
 files = [app]

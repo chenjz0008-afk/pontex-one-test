@@ -116,8 +116,9 @@ jobs:
           $env:PONTEX_UPDATE_ENDPOINT = 'http://127.0.0.1:8765/stable.json'
           $env:PONTEX_UPDATE_E2E_INSTALL = '1'
           Start-Process $exe
-          # 装好的版本：看 exe 自己的版本号（MSI 换掉了文件才会变）
-          function Ver { if (Test-Path $exe) { (Get-Item $exe).VersionInfo.ProductVersion } }
+          # 正在跑的版本：软件每次启动都在日志里写「PonteX One <版本> · …」（exe 自己的版本号是上游引擎的，不能用）
+          $log = Join-Path $env:USERPROFILE '.pontex-one\logs\pontex-one.log'
+          function Ver { if (Test-Path $log) { $m = Select-String -Path $log -Pattern 'PonteX One (\d+\.\d+\.\d+) ·' | Select-Object -Last 1; if ($m) { $m.Matches[0].Groups[1].Value } } }
           $ok = $false
           for ($i = 0; $i -lt 120; $i++) {
             $v = Ver

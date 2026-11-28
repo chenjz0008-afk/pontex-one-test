@@ -12,9 +12,13 @@ if [[ ! -x "$venv/bin/dmgbuild" ]]; then
 fi
 rm -f "$out"
 mkdir -p "$(dirname "$out")"
+rw="$(mktemp -d)/rw.dmg"
 "$venv/bin/dmgbuild" -s "$here/settings.py" \
   -D app="$app" \
   -D icon="$root/src-tauri/pontex/icons/icon.icns" \
   -D background="$root/src-tauri/pontex/icons/dmg.tiff" \
-  "PonteX One" "$out"
+  -D format=UDRW \
+  "PonteX One" "$rw"
+"$venv/bin/python" "$here/finish.py" "$rw" "$out"
+rm -f "$rw"
 "$venv/bin/python" "$here/verify.py" "$out"

@@ -76,6 +76,10 @@ def check(mount: str) -> None:
             fail(f"窗口没有用图片背景（backgroundType={icvp.get('backgroundType')}）")
         if not icvp.get("backgroundImageAlias"):
             fail("背景图没有挂上（缺 backgroundImageAlias）")
+        try:
+            store["."]["pBB0"]
+        except KeyError:
+            fail("缺少新版访达认的背景书签（pBB0），新版 macOS 不会显示背景")
         if int(icvp.get("iconSize", 0)) != 128:
             fail(f"图标大小是 {icvp.get('iconSize')}，应该是 128")
         if icvp.get("arrangeBy") not in (None, "none"):

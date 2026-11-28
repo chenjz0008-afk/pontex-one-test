@@ -134,6 +134,22 @@ impl Core {
         &self.engine
     }
 
+    /// 这次启动：返回上次有没有跑稳，并记成「还没跑稳」。
+    pub fn begin_run(&self) -> bool {
+        let last = self.locked().ran_ok;
+        let _ = self.edit(|store| store.ran_ok = false);
+        last
+    }
+
+    /// 一分钟后还在跑，就记成「跑稳了」。
+    pub fn ran_ok_after_a_minute(self: &Arc<Self>) {
+        let core = self.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            let _ = core.edit(|store| store.ran_ok = true);
+        });
+    }
+
     /// 这台电脑的随机编号（第一次用时生成）。
     pub fn install_id(&self) -> String {
         if let Some(id) = self.locked().install_id.clone() {

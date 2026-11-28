@@ -908,8 +908,12 @@ fn startup_code(detail: &str) -> &'static str {
 fn run_core(app: &AppHandle, core: Arc<Core>) {
     autostart::by_default(&core);
     let (updater, updater_core) = (app.clone(), core.clone());
+    let last_run_ok = core.begin_run();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(update::first_check()).await;
+        // 上次没跑稳（可能是新版本有问题）：马上查更新，好尽快拿到修复版。
+        let first = if last_run_ok { update::first_check() } else { Duration::from_secs(3) };
+        tokio::time::sleep(first).await;
+        updater_core.ran_ok_after_a_minute();
         loop {
             if updater_core.prefs().auto_update {
                 self_update(&updater, &updater_core, false).await;

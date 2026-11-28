@@ -5,7 +5,7 @@
 //
 // 顺序：本机校验、给更新包签名 → 上传到新的版本目录（不可变）→ 从公网拉回来逐个比对哈希、核对签名
 // → 最后才换 latest.json（官网下载）和 update/stable.json（软件自动更新）。中途任何一步失败，线上清单不变。
-//   node tools/publish.mjs <资产目录> --notes 说明.md [--notes-en notes.md] [--rollout 10] [--min-version x.y.z] [--dry-run]
+//   node tools/publish.mjs <资产目录> --notes 说明.md --smoke <冒烟报告目录> [--notes-en notes.md] [--rollout 10] [--min-version x.y.z] [--dry-run]
 //   node tools/publish.mjs rollout <0-100>      改已发布版本的推送比例（先 10，没问题再 100）
 //   node tools/publish.mjs block <版本>          撤回一个版本：还没更新的不会再拿到它
 // 资产按文件名认：PonteX-One-<版本>-macOS-universal.dmg / -Windows-x64.msi / -Windows-arm64.msi / …
@@ -121,6 +121,19 @@ function compare(a, b) {
 // 官网下载页只列安装包；更新包（.app.tar.gz）只进更新清单。
 const downloads = Object.fromEntries(Object.entries(assets).filter(([id]) => !id.startsWith("update:")));
 const latest = { version, channel, date: new Date().toISOString().slice(0, 10), engine, assets: downloads };
+
+// 只发测过的包：每个安装包都要在某份冒烟报告里出现（哈希一致），而且那份报告以 SMOKE OK 结尾。
+// 报告用 gh run download <冒烟测试的 run> -D <目录> 取回。
+const smokeDir = flag("--smoke");
+if (!smokeDir) die("发布要带冒烟测试的结果：--smoke <目录>（gh run download 取回的 smoke-* 报告）");
+const reports = readdirSync(smokeDir, { recursive: true })
+  .filter((f) => String(f).endsWith("report.txt"))
+  .map((f) => readFileSync(join(smokeDir, String(f)), "utf8").replace(/\r/g, ""));
+for (const asset of Object.values(downloads)) {
+  const tested = reports.some((r) => r.trimEnd().endsWith("SMOKE OK") && r.toLowerCase().includes(asset.sha256));
+  if (!tested) die(`${asset.file} 没有通过冒烟测试（或测的不是这个文件）`);
+  console.log(`  ✓ 冒烟测试通过：${asset.file}`);
+}
 
 // ---------- 自动更新：签名、清单 ----------
 const pubkey = JSON.parse(readFileSync(join(ROOT, "src-tauri/pontex/tauri.pontex.json"), "utf8")).plugins?.updater?.pubkey;
