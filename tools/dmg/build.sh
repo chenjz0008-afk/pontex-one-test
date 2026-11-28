@@ -19,6 +19,6 @@ rw="$(mktemp -d)/rw.dmg"
   -D background="$root/src-tauri/pontex/icons/dmg.tiff" \
   -D format=UDRW \
   "PonteX One" "$rw"
-"$venv/bin/python" "$here/finish.py" "$rw" "$out"
+"$venv/bin/python" "$here/finish.py" "$rw" "$out" "$root/src-tauri/pontex/icons/icon.icns"
 rm -f "$rw"
 "$venv/bin/python" "$here/verify.py" "$out"

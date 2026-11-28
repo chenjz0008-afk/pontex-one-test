@@ -1,6 +1,6 @@
 """让访达自己给 DMG 设背景，再压缩成最终的 DMG。
 
-    python finish.py <dmgbuild 打出的可写 DMG> <输出.dmg>
+    python finish.py <dmgbuild 打出的可写 DMG> <输出.dmg> <卷图标.icns>
 
 为什么：dmgbuild 写的背景引用（旧格式 alias）新版访达不认。对照实验（同一台 macOS 15 测试机）：
 dmgbuild 的 DMG 不管 TIFF 还是 PNG、补不补 pBB0 书签都不显示背景；由访达自己设一次（create-dmg 的做法），
@@ -9,6 +9,7 @@ dmgbuild 的 DMG 不管 TIFF 还是 PNG、补不补 pBB0 书签都不显示背�
 """
 
 import os
+import shutil
 import subprocess
 import sys
 
@@ -17,7 +18,7 @@ def run(*args: str) -> str:
     return subprocess.run(args, check=True, capture_output=True, text=True).stdout
 
 
-def main(source: str, out: str) -> None:
+def main(source: str, out: str, icon: str) -> None:
     # 要让访达看见这个盘：不能用 -nobrowse
     attached = run("hdiutil", "attach", "-readwrite", "-noautoopen", source)
     mount = attached.strip().splitlines()[-1].split("\t")[-1]
@@ -43,7 +44,8 @@ def main(source: str, out: str) -> None:
               end tell
             end tell'''
         run("osascript", "-e", script)
-        # 访达改写后会把「使用自定义图标」的标记丢掉：补回来，卷图标才显示 PonteX One
+        # 访达改写时会删掉卷图标、清掉「使用自定义图标」标记：放回去、补上，桌面上的盘才是 PonteX One
+        shutil.copyfile(icon, os.path.join(mount, ".VolumeIcon.icns"))
         run("SetFile", "-a", "C", mount)
         run("sync")
     finally:
@@ -55,6 +57,6 @@ def main(source: str, out: str) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         sys.exit(__doc__)
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])
